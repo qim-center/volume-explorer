@@ -1018,7 +1018,7 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   if (currentVol.isLoaded()) {
     console.log("currentVol with name " + currentVol.name + " is loaded");
   }
-  updateChannelUI(currentVol, channelIndex)
+  updateChannelUI(currentVol, channelIndex);
 
   if (channelIndex === 0) {
     const hist = v.getHistogram(0) as any;
