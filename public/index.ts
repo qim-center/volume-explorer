@@ -38,7 +38,7 @@ const PLAYBACK_INTERVAL = 80;
 
 const TEST_DATA: Record<string, TestDataSpec> = {
   zarrQimEscargot: {
-    url: "https://platform.qim.dk/qim-public/Escargot/Escargot.zarr",
+    url: "https://platform.qim.dk/qim-public/escargot/escargot.zarr",
     type: VolumeFileFormat.ZARR,
   },
   omeTiff: {
@@ -2340,7 +2340,7 @@ function main() {
     histogramSelection.dragging = null;
     requestHistogramHandleAnimation();
   });
-  
+
   histogramCanvas.addEventListener("mouseleave", () => {
     histogramSelection.dragging = null;
     histogramSelection.hover = null;
