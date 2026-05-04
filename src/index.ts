@@ -33,6 +33,8 @@ export type { CreateLoaderOptions } from "./loaders/index.js";
 export type { IVolumeLoader, PerChannelCallback, ThreadableVolumeLoader } from "./loaders/IVolumeLoader.js";
 export type { ZarrLoaderFetchOptions } from "./loaders/OmeZarrLoader.js";
 export type { WorkerLoader } from "./workers/VolumeLoaderContext.js";
+export type { HistogramRangeStrategy } from "./histogram/HistogramRangeStrategies.js";
+export { PercentileStrategy, ImageJAutoStrategy, ThresholdStrategy } from "./histogram/HistogramRangeStrategies.js";
 export {
   Histogram,
   Lut,
