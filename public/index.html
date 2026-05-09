@@ -46,24 +46,40 @@
                   <span class="scale-level-highlight">Current scale</span>
                   <span class="scale-level-highlight">(<span id="ome-zarr-scale-level-value">-</span>)</span>
                   <span
-                    id="ome-zarr-scale-loading-indicator"
-                    class="scale-loading-indicator"
-                    aria-hidden="true"
-                    title="Loading scale data"
+                  id="ome-zarr-scale-loading-indicator"
+                  class="scale-loading-indicator"
+                  aria-hidden="true"
+                  title="Loading scale data"
                   ></span>
                 </label>
               </div>
               <div>
-              <select id="ome-zarr-scale-select" class="form-select form-select-sm w-auto">
-                <option value="auto" selected>Auto</option>
-              </select>
-            </div>
+                <select id="ome-zarr-scale-select" class="form-select form-select-sm w-auto">
+                  <option value="auto" selected>Auto</option>
+                </select>
+              </div>
             </div>
           </div>
           <p id="scale-error" class="mt-2 mb-0"></p>
         </div>
-
+        
         <div class="controls-item">
+          <div class="mb-2">
+            <label for="colormap" class="col-form-label">Colormap</label>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <select id="colormap" class="form-select form-select-sm w-auto">
+                <option value="viridis" selected>Viridis</option>
+                <option value="plasma">Plasma</option>
+                <option value="inferno">Inferno</option>
+                <option value="magma">Magma</option>
+                <option value="cividis">Cividis</option>
+              </select>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="useColormapScalar" />
+                <label class="form-check-label" for="useColormapScalar">Use colormap</label>
+              </div>
+            </div>
+          </div>
           <div class="row row-cols-1 row-cols-lg-3 g-3">
             <div class="col">
               <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
@@ -190,10 +206,6 @@
           <p style="margin: 2px">
             <button id="colorize">Colorize</button>
             <input id="segchannel" type="number" min="0" max="10" step="1" value="0" />
-            <select name="Colormap" id="colormap">https%3A%2F%2Fplatform.qim.dk%2Fqim-public%2FLentils%2Flentils.zarr
-              <option value="viridis" selected>viridis</option>
-              <option value="plasma">plasma</option>
-            </select>
             <select name="Feature" id="feature">
               <option value="feature1" selected>f1</option>
               <option value="feature2">f2</option>

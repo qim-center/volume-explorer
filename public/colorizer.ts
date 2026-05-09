@@ -79,11 +79,19 @@ function loadFeature(): { featureTex: DataTexture; featureMin: number; featureMa
 const colorstops = {
   viridis: ["#440154", "#3a528b", "#20908c", "#5ec961", "#fde724"],
   plasma: ["#0d0887", "#46039f", "#7201a8", "#ab5dc2", "#d878b9", "#fca726", "#f0f921"],
+  
+  inferno: ["#000004", "#1b0c41", "#4a0c6b", "#781c6d", "#a52c60", "#cf4446", "#ed6925", "#fb9b06", "#f7d13d", "#fcffa4"],
+  magma:   ["#000004", "#140e36", "#3b0f70", "#641a80", "#8c2981", "#b5367a", "#de4968", "#f66e5b", "#fe9f6d", "#fecf92", "#fcfdbf"],
+  cividis: ["#00204c", "#2e3f6e", "#576c75", "#809b78", "#aecd6f", "#d8e35b", "#fdea45"],
 };
 
 export const colormaps = {
   viridis: { stops: colorstops.viridis, tex: loadColormap(colorstops.viridis) },
-  plasma: { stops: colorstops.plasma, tex: loadColormap(colorstops.plasma) },
+  plasma:  { stops: colorstops.plasma,  tex: loadColormap(colorstops.plasma) },
+
+  inferno: { stops: colorstops.inferno, tex: loadColormap(colorstops.inferno) },
+  magma:   { stops: colorstops.magma,   tex: loadColormap(colorstops.magma) },
+  cividis: { stops: colorstops.cividis, tex: loadColormap(colorstops.cividis) },
 };
 
 export const features = {

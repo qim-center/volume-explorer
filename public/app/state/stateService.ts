@@ -120,6 +120,7 @@ export function createInitialState(): State {
 
     colorizeEnabled: false,
     colorizeChannel: 0,
+    useColormapScalar: false,
     feature: "feature1",
     colormap: "viridis",
     featureMin: 0.0,

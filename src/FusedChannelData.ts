@@ -139,11 +139,17 @@ export default class FusedChannelData {
         srcTexture: {
           value: null,
         },
+        intensityTexture: {
+          value: null,
+        },
+        intensityMin: { value: 0 },
+        intensityMax: { value: 255 },
         featureColorRampMin: { value: 0 },
         featureColorRampMax: { value: 1 },
         colorRamp: {
           value: null,
         },
+        useColormapScalar: { value: false },
         useRepeatingCategoricalColors: { value: false },
         outlineColor: { value: new Color(0xffffff) },
         outlierColor: { value: new Color(0x444444) },
@@ -247,6 +253,11 @@ export default class FusedChannelData {
           mat.uniforms.featureColorRampMin.value = feature.featureMin;
           mat.uniforms.featureColorRampMax.value = feature.featureMax;
           mat.uniforms.colorRamp.value = feature.featureValueToColor;
+          // Toggle between scalar colormap and constant foreground behavior
+          mat.uniforms.useColormapScalar.value = feature.useColormapScalar;
+          mat.uniforms.intensityTexture.value = channels[chIndex].dataTexture;
+          mat.uniforms.intensityMin.value = channels[chIndex].rawMin;
+          mat.uniforms.intensityMax.value = channels[chIndex].rawMax;
           mat.uniforms.useRepeatingCategoricalColors.value = feature.useRepeatingColor;
           mat.uniforms.outlineColor.value = feature.outlineColor;
           mat.uniforms.outlierColor.value = feature.outlierColor;
