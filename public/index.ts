@@ -300,7 +300,7 @@ function showChannelUI(volume: Volume) {
   myState.channelFolderNames = [];
   for (let i = 0; i < nChannels; ++i) {
     myState.channelGui.push({
-      colorD: [...myState.foregroundColor] as [number, number, number],
+      colorD: [255, 255, 255] as [number, number, number],
       colorS: [0, 0, 0],
       colorE: [0, 0, 0],
       window: 1.0,
@@ -393,11 +393,7 @@ function showChannelUI(volume: Volume) {
           if (myState.channelGui[j].colorizeEnabled) {
             volume.setColorPaletteAlpha(j, myState.channelGui[j].colorizeAlpha);
           } else {
-            if (myState.useColormapScalar) {
-              applyColormapToChannel(volume, j);
-            } else {
-              volume.setColorPaletteAlpha(j, 0);
-            }
+            applyColormapToChannel(volume, j);
           }
 
           view3D.updateLuts(volume);
@@ -556,11 +552,6 @@ function showChannelUI(volume: Volume) {
           };
         })(i)
       );
-  }
-
-  const objectColorInput = document.getElementById("objectColor") as HTMLInputElement | null;
-  if (objectColorInput && myState.channelGui.length > 0) {
-    objectColorInput.value = rgb255ToHex(myState.foregroundColor);
   }
 
   for (let channelIndex = 0; channelIndex < myState.channelGui.length; channelIndex++) {
@@ -773,7 +764,6 @@ function getStateColorizeFeature(): ColorizeFeature | null {
     return {
       idsToFeatureValue: feature.featureTex,
       featureValueToColor: colormap,
-      useColormapScalar: myState.useColormapScalar,
       outlierData: feature.outlierData,
       inRangeIds: feature.inRangeIds,
       featureMin: myState.featureMin,
@@ -796,13 +786,9 @@ function getStateColorizeFeature(): ColorizeFeature | null {
 function setupColorizeControls() {
   const colorizeButton = document.getElementById("colorize") as HTMLButtonElement;
   const colormapInput = document.getElementById("colormap") as HTMLSelectElement | null;
-  const colormapToggle = document.getElementById("useColormapScalar") as HTMLInputElement | null;
-  if (colormapToggle) {
-    colormapToggle.checked = myState.useColormapScalar;
-  }
+
   if (colormapInput) {
     colormapInput.value = myState.colormap;
-    colormapInput.disabled = !myState.useColormapScalar;
   }
 
   colorizeButton?.addEventListener("click", () => {
@@ -822,16 +808,17 @@ function setupColorizeControls() {
     myState.colormap = colormap;
     applyColormapToVolume(myState.volume);
     view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  colormapToggle?.addEventListener("change", () => {
-    const isEnabled = colormapToggle.checked;
-    myState.useColormapScalar = isEnabled;
-    if (colormapInput) {
-      colormapInput.disabled = !isEnabled;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (colormap) {
+        params.set("colormap", colormap);
+      } else {
+        params.delete("colormap");
+      }
+      window.history.replaceState(null, "", `?${params.toString()}`);
+    } catch (e) {
+      // ignore history manipulation errors
     }
-    applyColormapToVolume(myState.volume);
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
   });
 
   const featureInput = document.getElementById("feature") as HTMLSelectElement;
@@ -915,10 +902,7 @@ function applyColormapToChannel(volume: Volume, channelIndex: number): void {
 
   const channelGui = myState.channelGui[channelIndex];
   const isLabelColorizeActive = !!channelGui?.colorizeEnabled && channelGui.colorizeAlpha > 0;
-  if (!myState.useColormapScalar || isLabelColorizeActive) {
-    if (!isLabelColorizeActive) {
-      volume.setColorPaletteAlpha(channelIndex, 0);
-    }
+  if (isLabelColorizeActive) {
     return;
   }
 
@@ -953,11 +937,6 @@ function syncColorInputsToState() {
   if (backgroundColorInput) {
     backgroundColorInput.value = rgb01ToHex(myState.backgroundColor);
   }
-
-  const objectColorInput = document.getElementById("objectColor") as HTMLInputElement | null;
-  if (objectColorInput) {
-    objectColorInput.value = rgb255ToHex(myState.foregroundColor);
-  }
 }
 
 function main() {
@@ -965,6 +944,10 @@ function main() {
   const urlParams = new URLSearchParams(window.location.search);
   const hiddenParam = urlParams.get("hidden")?.trim().toLowerCase();
   const turntableParam = urlParams.get("turntable")?.trim().toLowerCase();
+  const colormapParam = urlParams.get("colormap")?.trim();
+  if (colormapParam && colorizercolormaps[colormapParam]) {
+    myState.colormap = colormapParam;
+  }
   if (hiddenParam === "true") {
     if (ui.controlsPanel) {
       ui.controlsPanel.classList.add("hidden");

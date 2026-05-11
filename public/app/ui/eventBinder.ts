@@ -2,7 +2,7 @@ import { View3d } from "../../../src";
 import { State } from "../../types";
 import { CameraMode } from "../state/stateService";
 import { densitySliderToView3D } from "../utils/math";
-import { hexToRgb01, hexToRgb255 } from "../utils/color";
+import { hexToRgb01 } from "../utils/color";
 
 interface BindPrimaryViewControlsOptions {
   state: State;
@@ -98,23 +98,6 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
   backgroundColorBtn?.addEventListener("change", (event: Event) => {
     state.backgroundColor = hexToRgb01((event.target as HTMLInputElement)?.value, state.backgroundColor);
     view3D.setBackgroundColor(state.backgroundColor);
-  });
-  const objectColorBtn = document.getElementById("objectColor");
-  objectColorBtn?.addEventListener("change", (event: Event) => {
-    state.foregroundColor = hexToRgb255((event.target as HTMLInputElement)?.value, state.foregroundColor);
-
-    for (let channelIndex = 0; channelIndex < state.channelGui.length; channelIndex++) {
-      state.channelGui[channelIndex].colorD = [...state.foregroundColor] as [number, number, number];
-      view3D.updateChannelMaterial(
-        state.volume,
-        channelIndex,
-        state.channelGui[channelIndex].colorD,
-        state.channelGui[channelIndex].colorS,
-        state.channelGui[channelIndex].colorE,
-        state.channelGui[channelIndex].glossiness
-      );
-      view3D.updateMaterial(state.volume);
-    }
   });
 
   const globalOpacitySlider = document.getElementById("global-opacity-slider") as HTMLInputElement | null;

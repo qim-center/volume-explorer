@@ -64,33 +64,23 @@
         </div>
         
         <div class="controls-item">
-          <div class="mb-2">
-            <label for="colormap" class="col-form-label">Colormap</label>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-              <select id="colormap" class="form-select form-select-sm w-auto">
-                <option value="viridis" selected>Viridis</option>
-                <option value="plasma">Plasma</option>
-                <option value="inferno">Inferno</option>
-                <option value="magma">Magma</option>
-                <option value="cividis">Cividis</option>
-              </select>
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" role="switch" id="useColormapScalar" />
-                <label class="form-check-label" for="useColormapScalar">Use colormap</label>
+          <div class="row row-cols-1 row-cols-lg-2 g-3">
+            <div class="col">
+              <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
+                <label for="colormap" class="col-form-label mb-0 text-nowrap">Colormap</label>
+                <select id="colormap" class="form-select form-select-sm w-auto">
+                  <option value="viridis" selected>Viridis</option>
+                  <option value="plasma">Plasma</option>
+                  <option value="inferno">Inferno</option>
+                  <option value="magma">Magma</option>
+                  <option value="cividis">Cividis</option>
+                </select>
               </div>
             </div>
-          </div>
-          <div class="row row-cols-1 row-cols-lg-3 g-3">
             <div class="col">
               <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
                 <label for="backgroundColor" class="col-form-label mb-0 text-nowrap">Background</label>
                 <input type="color" id="backgroundColor" class="form-control form-control-color flex-shrink-0" value="#e6e6e6" title="Background color" />
-              </div>
-            </div>
-            <div class="col">
-              <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
-                <label for="objectColor" class="col-form-label mb-0 text-nowrap">Foreground</label>
-                <input type="color" id="objectColor" class="form-control form-control-color flex-shrink-0" value="#00aaff" title="Foreground color" />
               </div>
             </div>
             <div class="col">

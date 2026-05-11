@@ -60,8 +60,6 @@ export function isFloatTypeArray(array: TypedArray<NumberType>): array is Float3
 export interface ColorizeFeature {
   idsToFeatureValue: DataTexture;
   featureValueToColor: DataTexture;
-  /** If true, use intensity values to drive the colormap lookup. */
-  useColormapScalar: boolean;
   /**
    * Ignore the feature min and max, and treat the color ramp texture as a
    * direct lookup for feature values. Feature values that are greater than

@@ -35,7 +35,6 @@ export const DEFAULT_TEST_DATA: Record<string, TestDataSpec> = {
 
 const DEFAULT_COLORS = {
   background: [0.9, 0.9, 0.9] as [number, number, number],
-  foreground: [0, 170, 255] as [number, number, number],
   boundingBox: [0.3, 0.3, 0.3] as [number, number, number],
 };
 
@@ -107,7 +106,6 @@ export function createInitialState(): State {
     showBoundingBox: false,
     boundingBoxColor: DEFAULT_COLORS.boundingBox,
     backgroundColor: DEFAULT_COLORS.background,
-    foregroundColor: DEFAULT_COLORS.foreground,
     flipX: 1,
     flipY: 1,
     flipZ: 1,
@@ -120,7 +118,6 @@ export function createInitialState(): State {
 
     colorizeEnabled: false,
     colorizeChannel: 0,
-    useColormapScalar: false,
     feature: "feature1",
     colormap: "viridis",
     featureMin: 0.0,

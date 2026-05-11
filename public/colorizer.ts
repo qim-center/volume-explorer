@@ -76,13 +76,13 @@ function loadFeature(): { featureTex: DataTexture; featureMin: number; featureMa
   };
 }
 
+// colormaps from matplotlib
 const colorstops = {
-  viridis: ["#440154", "#3a528b", "#20908c", "#5ec961", "#fde724"],
-  plasma: ["#0d0887", "#46039f", "#7201a8", "#ab5dc2", "#d878b9", "#fca726", "#f0f921"],
-  
-  inferno: ["#000004", "#1b0c41", "#4a0c6b", "#781c6d", "#a52c60", "#cf4446", "#ed6925", "#fb9b06", "#f7d13d", "#fcffa4"],
-  magma:   ["#000004", "#140e36", "#3b0f70", "#641a80", "#8c2981", "#b5367a", "#de4968", "#f66e5b", "#fe9f6d", "#fecf92", "#fcfdbf"],
-  cividis: ["#00204c", "#2e3f6e", "#576c75", "#809b78", "#aecd6f", "#d8e35b", "#fdea45"],
+  viridis: ['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'],
+  plasma: ['#0d0887', '#46039f', '#7201a8', '#9c179e', '#bd3786', '#d8576b', '#ed7953', '#fb9f3a', '#fdca26', '#f0f921'],
+  inferno: ['#000004', '#1b0c41', '#4a0c6b', '#781c6d', '#a52c60', '#cf4446', '#ed6925', '#fb9b06', '#f7d13d', '#fcffa4'],
+  magma: ['#000004', '#180f3d', '#440f76', '#721f81', '#9e2f7f', '#cd4071', '#f1605d', '#fd9668', '#feca8d', '#fcfdbf'],
+  cividis: ['#00224e', '#123570', '#3b496c', '#575d6d', '#707173', '#8a8678', '#a59c74', '#c3b369', '#e1cc55', '#fee838']
 };
 
 export const colormaps = {
