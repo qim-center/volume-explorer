@@ -64,17 +64,15 @@
         </div>
         
         <div class="controls-item">
-          <div class="row row-cols-1 row-cols-lg-2 g-3">
+          <div class="row row-cols-1 row-cols-md-3 g-3">
             <div class="col">
-              <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
-                <label for="colormap" class="col-form-label mb-0 text-nowrap">Colormap</label>
-                <select id="colormap" class="form-select form-select-sm w-auto">
-                  <option value="viridis" selected>Viridis</option>
-                  <option value="plasma">Plasma</option>
-                  <option value="inferno">Inferno</option>
-                  <option value="magma">Magma</option>
-                  <option value="cividis">Cividis</option>
-                </select>
+              <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap h-100">
+                <details id="colormap-dropdown" class="colormap-dropdown">
+                  <summary id="colormap-dropdown-toggle" class="colormap-dropdown-toggle" aria-label="Choose colormap">
+                    <span id="colormap-dropdown-preview" class="colormap-dropdown-preview" aria-hidden="true"></span>
+                  </summary>
+                  <div id="colormap-picker" class="colormap-picker" role="listbox" aria-label="Colormap picker"></div>
+                </details>
               </div>
             </div>
             <div class="col">

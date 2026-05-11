@@ -86,12 +86,9 @@ const colorstops = {
 };
 
 export const colormaps = {
-  viridis: { stops: colorstops.viridis, tex: loadColormap(colorstops.viridis) },
-  plasma:  { stops: colorstops.plasma,  tex: loadColormap(colorstops.plasma) },
-
-  inferno: { stops: colorstops.inferno, tex: loadColormap(colorstops.inferno) },
-  magma:   { stops: colorstops.magma,   tex: loadColormap(colorstops.magma) },
-  cividis: { stops: colorstops.cividis, tex: loadColormap(colorstops.cividis) },
+  ...Object.fromEntries(
+    Object.entries(colorstops).map(([name, stops]) => [name, { stops, tex: loadColormap(stops) }])
+  ),
 };
 
 export const features = {

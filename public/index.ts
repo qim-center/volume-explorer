@@ -783,12 +783,83 @@ function getStateColorizeFeature(): ColorizeFeature | null {
   }
 }
 
+function setColormapInUrl(colormap: string): void {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (colormap) {
+      params.set("colormap", colormap);
+    } else {
+      params.delete("colormap");
+    }
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  } catch (e) {
+    console.log(e)
+  }
+}
+
+function syncSelectedColormapSwatch(colormapPicker: HTMLElement, colormapPreview: HTMLElement | null): void {
+  const swatches = colormapPicker.querySelectorAll<HTMLButtonElement>(".colormap-swatch");
+  for (const swatch of swatches) {
+    swatch.classList.toggle("is-selected", swatch.dataset.colormapName === myState.colormap);
+  }
+
+  if (colormapPreview && colorizercolormaps[myState.colormap]) {
+    colormapPreview.style.background = `linear-gradient(to right, ${colorizercolormaps[myState.colormap].stops.join(", ")})`;
+    colormapPreview.title = myState.colormap;
+  }
+}
+
+function buildColormapPicker(
+  colormapPicker: HTMLElement,
+  colormapPreview: HTMLElement | null,
+  colormapDropdown: HTMLDetailsElement | null
+): void {
+  const colormapNames = Object.keys(colorizercolormaps);
+  colormapPicker.innerHTML = "";
+
+  if (colormapNames.length === 0) {
+    return;
+  }
+
+  if (!colorizercolormaps[myState.colormap]) {
+    myState.colormap = colormapNames[0];
+  }
+
+  for (const colormapName of colormapNames) {
+    const colormap = colorizercolormaps[colormapName];
+    const swatch = document.createElement("button");
+    swatch.type = "button";
+    swatch.className = "colormap-swatch";
+    swatch.dataset.colormapName = colormapName;
+    swatch.setAttribute("aria-label", `Select ${colormapName} colormap`);
+    swatch.title = colormapName;
+    swatch.style.background = `linear-gradient(to right, ${colormap.stops.join(", ")})`;
+    swatch.addEventListener("click", () => {
+      if (myState.colormap === colormapName) {
+        colormapDropdown?.removeAttribute("open");
+        return;
+      }
+      myState.colormap = colormapName;
+      syncSelectedColormapSwatch(colormapPicker, colormapPreview);
+      applyColormapToVolume(myState.volume);
+      view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
+      setColormapInUrl(colormapName);
+      colormapDropdown?.removeAttribute("open");
+    });
+    colormapPicker.appendChild(swatch);
+  }
+
+  syncSelectedColormapSwatch(colormapPicker, colormapPreview);
+}
+
 function setupColorizeControls() {
   const colorizeButton = document.getElementById("colorize") as HTMLButtonElement;
-  const colormapInput = document.getElementById("colormap") as HTMLSelectElement | null;
+  const colormapPicker = document.getElementById("colormap-picker") as HTMLElement | null;
+  const colormapPreview = document.getElementById("colormap-dropdown-preview") as HTMLElement | null;
+  const colormapDropdown = document.getElementById("colormap-dropdown") as HTMLDetailsElement | null;
 
-  if (colormapInput) {
-    colormapInput.value = myState.colormap;
+  if (colormapPicker) {
+    buildColormapPicker(colormapPicker, colormapPreview, colormapDropdown);
   }
 
   colorizeButton?.addEventListener("click", () => {
@@ -801,24 +872,6 @@ function setupColorizeControls() {
     const channelIndex = Number(segChannelInput.value);
     myState.colorizeChannel = channelIndex;
     view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  colormapInput?.addEventListener("change", () => {
-    const colormap = colormapInput.value;
-    myState.colormap = colormap;
-    applyColormapToVolume(myState.volume);
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (colormap) {
-        params.set("colormap", colormap);
-      } else {
-        params.delete("colormap");
-      }
-      window.history.replaceState(null, "", `?${params.toString()}`);
-    } catch (e) {
-      // ignore history manipulation errors
-    }
   });
 
   const featureInput = document.getElementById("feature") as HTMLSelectElement;

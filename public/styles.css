@@ -73,6 +73,110 @@ body {
   width: 2.8rem;
 }
 
+.colormap-dropdown {
+  position: relative;
+  width: min(100%, 8rem);
+}
+
+.colormap-dropdown-toggle {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 0.25rem;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.2rem 0.45rem 0.2rem 0.2rem;
+}
+
+.colormap-dropdown-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.colormap-dropdown-toggle::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid rgba(255, 255, 255, 1);
+  border-bottom: 2px solid rgba(255, 255, 255, 1);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.colormap-dropdown[open] .colormap-dropdown-toggle::after {
+  transform: rotate(-135deg);
+}
+
+.colormap-dropdown-preview {
+  display: block;
+  flex: 1 1 auto;
+  height: 1.2rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+}
+
+.colormap-picker {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgb(50, 50, 50);
+}
+
+.colormap-dropdown:not([open]) .colormap-picker {
+  display: none;
+}
+
+.colormap-swatch {
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  padding: 0;
+
+  border: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.colormap-swatch:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+}
+
+.colormap-swatch::after {
+  content: attr(data-colormap-name);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.35rem);
+  transform: translate(-50%, 0.25rem);
+  padding: 0.12rem 0.4rem;
+  border-radius: 0.28rem;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 10;
+}
+
+.colormap-swatch:hover::after,
+.colormap-swatch:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 #controls-panel .form-switch .form-check-input {
   margin-top: 0;
 }
