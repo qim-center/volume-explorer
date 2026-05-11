@@ -192,6 +192,18 @@ body.volume-loading #viewer-panel .volume-loading-overlay {
   -moz-appearance: textfield;
 }
 
+.opacity-input-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.opacity-value {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .crop-track,
 .crop-fill {
   position: absolute;

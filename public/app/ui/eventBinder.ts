@@ -118,19 +118,46 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
   });
 
   const globalOpacitySlider = document.getElementById("global-opacity-slider") as HTMLInputElement | null;
+  const globalOpacityInput = document.getElementById("global-opacity-input") as HTMLInputElement | null;
   if (globalOpacitySlider) {
-    globalOpacitySlider.value = `${state.density / 100}`;
-    globalOpacitySlider.style.setProperty("--value", `${Math.round((state.density / 100) * 100)}`);
+    const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
+    const applyOpacityPercent = (percent: number) => {
+      const clampedPercent = clampPercent(percent);
+      const sliderValue = clampedPercent / 100;
+      state.density = clampedPercent;
+      globalOpacitySlider.value = `${sliderValue}`;
+      globalOpacitySlider.style.setProperty("--value", `${clampedPercent}`);
+      if (globalOpacityInput) {
+        globalOpacityInput.value = `${clampedPercent}`;
+      }
+      view3D.updateDensity(state.volume, densitySliderToView3D(state.density));
+    };
+
+    applyOpacityPercent(state.density);
 
     const onGlobalOpacityInput = () => {
       const sliderValue = Math.min(1, Math.max(0, globalOpacitySlider.valueAsNumber));
-      state.density = sliderValue * 100;
-      globalOpacitySlider.style.setProperty("--value", `${Math.round(sliderValue * 100)}`);
-      view3D.updateDensity(state.volume, densitySliderToView3D(state.density));
+      applyOpacityPercent(sliderValue * 100);
     };
 
     globalOpacitySlider.addEventListener("input", onGlobalOpacityInput);
     globalOpacitySlider.addEventListener("change", onGlobalOpacityInput);
+
+    if (globalOpacityInput) {
+      const onOpacityValueCommit = () => {
+        const nextValue = Number.isFinite(globalOpacityInput.valueAsNumber)
+          ? globalOpacityInput.valueAsNumber
+          : state.density;
+        applyOpacityPercent(nextValue);
+      };
+
+      globalOpacityInput.addEventListener("change", onOpacityValueCommit);
+      globalOpacityInput.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter") {
+          onOpacityValueCommit();
+        }
+      });
+    }
   }
 }
 
