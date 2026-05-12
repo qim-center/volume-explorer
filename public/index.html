@@ -177,6 +177,20 @@
 
         <div class="controls-item">
           <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
+            <label class="col-form-label mb-0 text-nowrap">Colormap range</label>
+            <div class="flex-grow-1">
+              <div class="crop-merged-slider">
+                <div class="crop-track"></div>
+                <div id="colormap-range-fill" class="crop-fill"></div>
+                <input id="colormap-range-min" class="crop-handle form-range" type="range" min="0" max="255" step="1" value="0" />
+                <input id="colormap-range-max" class="crop-handle form-range" type="range" min="0" max="255" step="1" value="255" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-item">
+          <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
             <label for="global-opacity-slider" class="col-form-label mb-0 text-nowrap">Global opacity</label>
             <div class="d-flex align-items-center gap-2 flex-grow-1 w-100">
               <input

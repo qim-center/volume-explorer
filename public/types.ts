@@ -96,6 +96,8 @@ export interface State {
   colorizeEnabled: boolean;
   colorizeChannel: number;
   colormap: string;
+  colormapMin: number;
+  colormapMax: number;
   feature: string;
   featureMin: number;
   featureMax: number;

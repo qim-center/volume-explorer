@@ -1078,8 +1078,10 @@ function main() {
     state: myState,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
+    getColormapRange: () => ({ minBin: myState.colormapMin, maxBin: myState.colormapMax }),
   });
   colormapController.setupColorizeControls();
+  colormapController.setupColormapRangeControls();
 
   setupCropControls();
   setupSliceSelectorControls();
