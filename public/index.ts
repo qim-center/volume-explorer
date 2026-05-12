@@ -1068,6 +1068,12 @@ function main() {
   });
   histogramController.setupInteractions();
 
+  ["X", "Y", "Z", "3D"].forEach((mode) => {
+    document.getElementById(mode)?.addEventListener("click", () => {
+      histogramController?.applyHistogramLutFromBins(0);
+    });
+  });
+
   colormapController = createColormapController({
     state: myState,
     getVolume: () => myState.volume,

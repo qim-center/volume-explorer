@@ -73,87 +73,89 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const x0 = (minB / bins.length) * w;
     const x1 = (maxB / bins.length) * w;
 
-    if (x1 > x0) {
-      const rampGradient = ctx.createLinearGradient(x0, 0, x1, 0);
-      rampGradient.addColorStop(0, "rgba(255,255,255,0.0)");
-      rampGradient.addColorStop(1, "rgba(255,255,255,0.6)");
-      ctx.fillStyle = rampGradient;
+    if (!isSliceMode()) {
+      if (x1 > x0) {
+        const rampGradient = ctx.createLinearGradient(x0, 0, x1, 0);
+        rampGradient.addColorStop(0, "rgba(255,255,255,0.0)");
+        rampGradient.addColorStop(1, "rgba(255,255,255,0.6)");
+        ctx.fillStyle = rampGradient;
+
+        ctx.beginPath();
+        ctx.moveTo(x0, plotH);
+        ctx.lineTo(x1, 0);
+        ctx.lineTo(x1, plotH);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.fillRect(x1, 0, Math.max(0, w - x1), plotH);
+
+      const minHover = selection.hover === "min" || selection.dragging === "min";
+      const maxHover = selection.hover === "max" || selection.dragging === "max";
+
+      const canvasStyles = window.getComputedStyle(canvas);
+      const handleColor = canvasStyles.getPropertyValue("--histogram-handle-color").trim() || "#000000";
+      const handleWidth = Number(canvasStyles.getPropertyValue("--histogram-handle-width").trim()) || 4;
+      const handleWidthHover = Number(canvasStyles.getPropertyValue("--histogram-handle-width-hover").trim()) || 6;
+      const displayRect = canvas.getBoundingClientRect();
+      const canvasScaleX = displayRect.width > 0 ? w / displayRect.width : 1;
+      const canvasScaleY = displayRect.height > 0 ? h / displayRect.height : 1;
+      const labelPadH = (parseFloat(canvasStyles.getPropertyValue("--histogram-label-pad-x").trim()) || 10) * canvasScaleX;
+      const labelPadV = (parseFloat(canvasStyles.getPropertyValue("--histogram-label-pad-y").trim()) || 6) * canvasScaleY;
+      const labelColor = canvasStyles.getPropertyValue("--histogram-label-color").trim() || "#303030";
+      const labelOpacity = Math.min(
+        1,
+        Math.max(0, parseFloat(canvasStyles.getPropertyValue("--histogram-label-opacity").trim()) || 1)
+      );
+      const labelFontSize =
+        (parseFloat(canvasStyles.getPropertyValue("--histogram-label-font-size").trim()) || 80) * canvasScaleY;
+      const labelFontFamily = canvasStyles.getPropertyValue("--histogram-label-font-family").trim() || "monospace";
+      const handleWidthDelta = handleWidthHover - handleWidth;
+
+      ctx.strokeStyle = handleColor;
+      const minWeight = minHover ? Math.max(selection.minHandleHoverWeight, 1) : selection.minHandleHoverWeight;
+      ctx.lineWidth = handleWidth + handleWidthDelta * minWeight;
 
       ctx.beginPath();
-      ctx.moveTo(x0, plotH);
-      ctx.lineTo(x1, 0);
+      ctx.moveTo(x0, 0);
+      ctx.lineTo(x0, plotH);
+      ctx.stroke();
+
+      const maxWeight = maxHover ? Math.max(selection.maxHandleHoverWeight, 1) : selection.maxHandleHoverWeight;
+      ctx.lineWidth = handleWidth + handleWidthDelta * maxWeight;
+      ctx.beginPath();
+      ctx.moveTo(x1, 0);
       ctx.lineTo(x1, plotH);
-      ctx.closePath();
-      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = labelFontSize + "px " + labelFontFamily;
+
+      const drawHandleLabel = (binIndex: number, xHandle: number) => {
+        const labelText = `${Math.round(hist.getValueFromBinIndex(binIndex))}`;
+        const textW = ctx.measureText(labelText).width;
+        const boxW = textW + labelPadH * 2;
+        const boxH = labelFontSize + labelPadV * 2;
+        const boxX = Math.min(Math.max(0, xHandle - boxW / 2), w - boxW);
+        const boxY = plotH / 2 - boxH / 2;
+
+        ctx.globalAlpha = labelOpacity;
+        ctx.fillStyle = labelColor;
+        ctx.beginPath();
+        const labelRadius = parseFloat(canvasStyles.getPropertyValue("--histogram-label-radius").trim()) || 8;
+        ctx.roundRect(boxX, boxY, boxW, boxH, labelRadius * Math.min(canvasScaleX, canvasScaleY));
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(labelText, boxX + boxW / 2, boxY + boxH / 2);
+      };
+
+      drawHandleLabel(minB, x0);
+      drawHandleLabel(maxB, x1);
     }
-
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fillRect(x1, 0, Math.max(0, w - x1), plotH);
-
-    const minHover = selection.hover === "min" || selection.dragging === "min";
-    const maxHover = selection.hover === "max" || selection.dragging === "max";
-
-    const canvasStyles = window.getComputedStyle(canvas);
-    const handleColor = canvasStyles.getPropertyValue("--histogram-handle-color").trim() || "#000000";
-    const handleWidth = Number(canvasStyles.getPropertyValue("--histogram-handle-width").trim()) || 4;
-    const handleWidthHover = Number(canvasStyles.getPropertyValue("--histogram-handle-width-hover").trim()) || 6;
-    const displayRect = canvas.getBoundingClientRect();
-    const canvasScaleX = displayRect.width > 0 ? w / displayRect.width : 1;
-    const canvasScaleY = displayRect.height > 0 ? h / displayRect.height : 1;
-    const labelPadH = (parseFloat(canvasStyles.getPropertyValue("--histogram-label-pad-x").trim()) || 10) * canvasScaleX;
-    const labelPadV = (parseFloat(canvasStyles.getPropertyValue("--histogram-label-pad-y").trim()) || 6) * canvasScaleY;
-    const labelColor = canvasStyles.getPropertyValue("--histogram-label-color").trim() || "#303030";
-    const labelOpacity = Math.min(
-      1,
-      Math.max(0, parseFloat(canvasStyles.getPropertyValue("--histogram-label-opacity").trim()) || 1)
-    );
-    const labelFontSize =
-      (parseFloat(canvasStyles.getPropertyValue("--histogram-label-font-size").trim()) || 80) * canvasScaleY;
-    const labelFontFamily = canvasStyles.getPropertyValue("--histogram-label-font-family").trim() || "monospace";
-    const handleWidthDelta = handleWidthHover - handleWidth;
-
-    ctx.strokeStyle = handleColor;
-    const minWeight = minHover ? Math.max(selection.minHandleHoverWeight, 1) : selection.minHandleHoverWeight;
-    ctx.lineWidth = handleWidth + handleWidthDelta * minWeight;
-
-    ctx.beginPath();
-    ctx.moveTo(x0, 0);
-    ctx.lineTo(x0, plotH);
-    ctx.stroke();
-
-    const maxWeight = maxHover ? Math.max(selection.maxHandleHoverWeight, 1) : selection.maxHandleHoverWeight;
-    ctx.lineWidth = handleWidth + handleWidthDelta * maxWeight;
-    ctx.beginPath();
-    ctx.moveTo(x1, 0);
-    ctx.lineTo(x1, plotH);
-    ctx.stroke();
-
-    ctx.font = labelFontSize + "px " + labelFontFamily;
-
-    const drawHandleLabel = (binIndex: number, xHandle: number) => {
-      const labelText = `${Math.round(hist.getValueFromBinIndex(binIndex))}`;
-      const textW = ctx.measureText(labelText).width;
-      const boxW = textW + labelPadH * 2;
-      const boxH = labelFontSize + labelPadV * 2;
-      const boxX = Math.min(Math.max(0, xHandle - boxW / 2), w - boxW);
-      const boxY = plotH / 2 - boxH / 2;
-
-      ctx.globalAlpha = labelOpacity;
-      ctx.fillStyle = labelColor;
-      ctx.beginPath();
-      const labelRadius = parseFloat(canvasStyles.getPropertyValue("--histogram-label-radius").trim()) || 8;
-      ctx.roundRect(boxX, boxY, boxW, boxH, labelRadius * Math.min(canvasScaleX, canvasScaleY));
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(labelText, boxX + boxW / 2, boxY + boxH / 2);
-    };
-
-    drawHandleLabel(minB, x0);
-    drawHandleLabel(maxB, x1);
 
     ctx.strokeStyle = "#6a6a6a";
     ctx.lineWidth = 1;
@@ -190,10 +192,15 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const min = selection.minBin;
     const max = selection.maxBin;
 
-    const lut = new Lut().createFromMinMax(min, max);
+    const view3d = getView3D();
+    const viewMode = view3d.getViewMode?.();
+    const lut = viewMode !== undefined && viewMode !== ""
+      ? new Lut().createNoTransparency()
+      : new Lut().createFromMinMax(min, max);
     volume.setLut(channelIndex, lut);
     onLutUpdated?.(volume, channelIndex);
-    getView3D().updateLuts(volume);
+    view3d.updateLuts(volume);
+    drawHistogramFromVolume(volume, channelIndex);
   };
 
   const animateHistogramHandleHover = () => {
@@ -241,6 +248,12 @@ export function createHistogramController(options: HistogramControllerOptions) {
     histogramHandleAnimationFrame = window.requestAnimationFrame(animateHistogramHandleHover);
   };
 
+  const isSliceMode = (): boolean => {
+    const view3d = getView3D();
+    const viewMode = view3d.getViewMode?.();
+    return viewMode !== undefined && viewMode !== "";
+  };
+
   const setupInteractions = (): void => {
     if (!canvas) {
       return;
@@ -248,7 +261,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
 
     canvas.addEventListener("mousedown", (event) => {
       const volume = getVolume();
-      if (!volume) {
+      if (!volume || isSliceMode()) {
         return;
       }
 
@@ -285,7 +298,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
         return;
       }
 
-      if (selection.dragging) {
+      if (selection.dragging && !isSliceMode()) {
         const b = histogramBinFromX(x, canvas, bins.length);
 
         if (selection.dragging === "min") {
@@ -297,6 +310,13 @@ export function createHistogramController(options: HistogramControllerOptions) {
         applyHistogramLutFromBins(0);
         drawHistogramFromVolume(volume, 0);
         requestHistogramHandleAnimation();
+        return;
+      }
+
+      if (isSliceMode()) {
+        selection.dragging = null;
+        selection.hover = null;
+        canvas.style.cursor = "default";
         return;
       }
 
