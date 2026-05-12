@@ -7,7 +7,7 @@ import {
   ThresholdStrategy,
 } from "./histogram/HistogramRangeStrategies.js";
 
-const NBINS = 256;
+export const NBINS = 64;
 
 type HistogramData = {
   bins: Uint32Array;

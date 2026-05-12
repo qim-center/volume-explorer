@@ -24,7 +24,7 @@ import { denoiseFragmentShaderSrc, denoiseShaderUniforms } from "./constants/den
 import { pathtraceOutputFragmentShaderSrc, pathtraceOutputShaderUniforms } from "./constants/pathtraceOutputShader.js";
 import { pathTracingFragmentShaderSrc, pathTracingUniforms } from "./constants/volumePTshader.js";
 
-import { LUT_ARRAY_LENGTH } from "./Lut.js";
+import { LUT_ENTRIES, LUT_ARRAY_LENGTH } from "./Lut.js";
 import Volume from "./Volume.js";
 import { FUSE_DISABLED_RGB_COLOR, type FuseChannel, isOrthographicCamera } from "./types.js";
 import { Light } from "./Light.js";
@@ -85,7 +85,7 @@ export default class PathTracedVolume implements VolumeRenderImpl {
     // create Lut textures
     // empty array
     const lutData = new Uint8Array(LUT_ARRAY_LENGTH * 4).fill(1);
-    const lut0 = new DataTexture(lutData, 256, 4, RGBAFormat, UnsignedByteType);
+    const lut0 = new DataTexture(lutData, LUT_ENTRIES, 4, RGBAFormat, UnsignedByteType);
     lut0.minFilter = lut0.magFilter = LinearFilter;
     lut0.needsUpdate = true;
     this.pathTracingUniforms.gLutTexture.value = lut0;

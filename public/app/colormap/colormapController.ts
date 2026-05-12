@@ -1,8 +1,7 @@
 import { Color } from "three";
-import { View3d, Volume, ColorizeFeature } from "../../../src";
+import { View3d, Volume, ColorizeFeature, LUT_ENTRIES } from "../../../src";
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "../../colorizer";
 
-const LUT_ENTRIES = 256;
 const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
 
 interface ColormapControllerState {
@@ -22,10 +21,11 @@ interface ColormapControllerOptions {
   getVolume: () => Volume;
   getView3D: () => View3d;
   getColormapRange?: () => { minBin: number; maxBin: number };
+  onColormapChange?: () => void;
 }
 
 export function createColormapController(options: ColormapControllerOptions) {
-  const { state, getVolume, getView3D, getColormapRange } = options;
+  const { state, getVolume, getView3D, getColormapRange, onColormapChange } = options;
 
   const sampleColormapStops = (stopColors: Color[], t: number): [number, number, number] => {
     if (stopColors.length === 0) {
@@ -193,6 +193,7 @@ export function createColormapController(options: ColormapControllerOptions) {
         const volume = getVolume();
         const view3D = getView3D();
         applyColormapToVolume(volume);
+        onColormapChange?.();
         view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
         view3D.redraw();
         setColormapInUrl(colormapName);
@@ -284,6 +285,7 @@ export function createColormapController(options: ColormapControllerOptions) {
       if (volume) {
         applyColormapToVolume(volume);
       }
+      onColormapChange?.();
     };
 
     const onMaxInput = () => {
@@ -298,6 +300,7 @@ export function createColormapController(options: ColormapControllerOptions) {
       if (volume) {
         applyColormapToVolume(volume);
       }
+      onColormapChange?.();
     };
 
     minInput.addEventListener("input", onMinInput);
