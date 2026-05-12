@@ -37,6 +37,7 @@ import {
 import { bindPlaybackAndRenderControls, bindPrimaryViewControls } from "./app/ui/eventBinder";
 import { getAppUiElements } from "./app/ui/elementRegistry";
 import { createHistogramController } from "./app/histogram/histogramController";
+import { createColormapController } from "./app/colormap/colormapController";
 import { createLoaderOrchestration } from "./app/loaders/loaderOrchestration";
 import { rgb01ToHex, rgb255ToHex } from "./app/utils/color";
 import { densitySliderToView3D, gammaSliderToImageValues } from "./app/utils/math";
@@ -48,8 +49,6 @@ const PREFETCH_CONCURRENCY_LIMIT = 3;
 const PREFETCH_DISTANCE: [number, number, number, number] = [5, 5, 5, 5];
 const MAX_PREFETCH_CHUNKS = 25;
 const PLAYBACK_INTERVAL = 80;
-const LUT_ENTRIES = 256;
-const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
 
 const TEST_DATA = DEFAULT_TEST_DATA as Record<string, TestDataSpec>;
 
@@ -73,6 +72,7 @@ const getNumberOfTimesteps = (): number => myState.totalFrames || myState.volume
 
 const histogramSelection = createHistogramSelection();
 let histogramController: ReturnType<typeof createHistogramController> | null = null;
+let colormapController: ReturnType<typeof createColormapController> | null = null;
 const cropSliceManager = createCropSliceManager({
   state: myState,
   getView3D: () => view3D,
@@ -757,147 +757,6 @@ const { loadTestData, loadVolume } = createLoaderOrchestration({
   goToZSlice,
 });
 
-function getStateColorizeFeature(): ColorizeFeature | null {
-  if (myState.colorizeEnabled) {
-    const feature = colorizerfeatures[myState.feature];
-    const colormap = colorizercolormaps[myState.colormap].tex;
-    return {
-      idsToFeatureValue: feature.featureTex,
-      featureValueToColor: colormap,
-      outlierData: feature.outlierData,
-      inRangeIds: feature.inRangeIds,
-      featureMin: myState.featureMin,
-      featureMax: myState.featureMax,
-      outlineColor: new Color(0xffffff),
-      outlineAlpha: 1.0,
-      outlierColor: new Color(0x444444),
-      outOfRangeColor: new Color(0x444444),
-      outlierDrawMode: 0,
-      outOfRangeDrawMode: 0,
-      hideOutOfRange: false,
-      frameToGlobalIdLookup: new Map(),
-      useRepeatingColor: false,
-    };
-  } else {
-    return null;
-  }
-}
-
-function setColormapInUrl(colormap: string): void {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    if (colormap) {
-      params.set("colormap", colormap);
-    } else {
-      params.delete("colormap");
-    }
-    window.history.replaceState(null, "", `?${params.toString()}`);
-  } catch (e) {
-    console.log(e)
-  }
-}
-
-function syncSelectedColormapSwatch(colormapPicker: HTMLElement, colormapPreview: HTMLElement | null): void {
-  const swatches = colormapPicker.querySelectorAll<HTMLButtonElement>(".colormap-swatch");
-  for (const swatch of swatches) {
-    swatch.classList.toggle("is-selected", swatch.dataset.colormapName === myState.colormap);
-  }
-
-  if (colormapPreview && colorizercolormaps[myState.colormap]) {
-    colormapPreview.style.background = `linear-gradient(to right, ${colorizercolormaps[myState.colormap].stops.join(", ")})`;
-    colormapPreview.title = myState.colormap;
-  }
-}
-
-function buildColormapPicker(
-  colormapPicker: HTMLElement,
-  colormapPreview: HTMLElement | null,
-  colormapDropdown: HTMLDetailsElement | null
-): void {
-  const colormapNames = Object.keys(colorizercolormaps);
-  colormapPicker.innerHTML = "";
-
-  if (colormapNames.length === 0) {
-    return;
-  }
-
-  if (!colorizercolormaps[myState.colormap]) {
-    myState.colormap = colormapNames[0];
-  }
-
-  for (const colormapName of colormapNames) {
-    const colormap = colorizercolormaps[colormapName];
-    const swatch = document.createElement("button");
-    swatch.type = "button";
-    swatch.className = "colormap-swatch";
-    swatch.dataset.colormapName = colormapName;
-    swatch.setAttribute("aria-label", `Select ${colormapName} colormap`);
-    swatch.title = colormapName;
-    swatch.style.background = `linear-gradient(to right, ${colormap.stops.join(", ")})`;
-    swatch.addEventListener("click", () => {
-      if (myState.colormap === colormapName) {
-        colormapDropdown?.removeAttribute("open");
-        return;
-      }
-      myState.colormap = colormapName;
-      syncSelectedColormapSwatch(colormapPicker, colormapPreview);
-      applyColormapToVolume(myState.volume);
-      view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-      setColormapInUrl(colormapName);
-      colormapDropdown?.removeAttribute("open");
-    });
-    colormapPicker.appendChild(swatch);
-  }
-
-  syncSelectedColormapSwatch(colormapPicker, colormapPreview);
-}
-
-function setupColorizeControls() {
-  const colorizeButton = document.getElementById("colorize") as HTMLButtonElement;
-  const colormapPicker = document.getElementById("colormap-picker") as HTMLElement | null;
-  const colormapPreview = document.getElementById("colormap-dropdown-preview") as HTMLElement | null;
-  const colormapDropdown = document.getElementById("colormap-dropdown") as HTMLDetailsElement | null;
-
-  if (colormapPicker) {
-    buildColormapPicker(colormapPicker, colormapPreview, colormapDropdown);
-  }
-
-  colorizeButton?.addEventListener("click", () => {
-    myState.colorizeEnabled = !myState.colorizeEnabled;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const segChannelInput = document.getElementById("segchannel") as HTMLInputElement;
-  segChannelInput?.addEventListener("change", () => {
-    const channelIndex = Number(segChannelInput.value);
-    myState.colorizeChannel = channelIndex;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const featureInput = document.getElementById("feature") as HTMLSelectElement;
-  featureInput?.addEventListener("change", () => {
-    const feature = featureInput.value;
-    myState.feature = feature;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const featureMinInput = document.getElementById("featmin") as HTMLInputElement;
-  featureMinInput?.addEventListener("change", () => {
-    const featureMin = Number(featureMinInput.value) / 100.0;
-    console.log("featureMin: " + featureMin);
-    myState.featureMin = featureMin;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const featureMaxInput = document.getElementById("featmax") as HTMLInputElement;
-  featureMaxInput?.addEventListener("change", () => {
-    const featureMax = Number(featureMaxInput.value) / 100.0;
-    console.log("featureMax: " + featureMax);
-    myState.featureMax = featureMax;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-}
-
 function drawHistogramFromVolume(v: Volume, channelIndex: number) {
   histogramController?.drawHistogramFromVolume(v, channelIndex);
 }
@@ -906,78 +765,16 @@ function applyHistogramLutFromBins(channelIndex: number) {
   histogramController?.applyHistogramLutFromBins(channelIndex);
 }
 
-function sampleColormapStops(stopColors: Color[], t: number): [number, number, number] {
-  if (stopColors.length === 0) {
-    return [255, 255, 255];
-  }
-  if (stopColors.length === 1) {
-    const only = stopColors[0];
-    return [Math.round(only.r * 255), Math.round(only.g * 255), Math.round(only.b * 255)];
-  }
-
-  const clamped = Math.min(1, Math.max(0, t));
-  const scaled = clamped * (stopColors.length - 1);
-  const index = Math.min(stopColors.length - 2, Math.floor(scaled));
-  const frac = scaled - index;
-  const a = stopColors[index];
-  const b = stopColors[index + 1];
-  const r = a.r + (b.r - a.r) * frac;
-  const g = a.g + (b.g - a.g) * frac;
-  const bcol = a.b + (b.b - a.b) * frac;
-  return [Math.round(r * 255), Math.round(g * 255), Math.round(bcol * 255)];
-}
-
-function buildColormapPalette(stops: string[], alphaLut: Uint8Array): Uint8Array {
-  const palette = new Uint8Array(LUT_ARRAY_LENGTH);
-  const stopColors = stops.map((stop) => new Color(stop));
-
-  for (let i = 0; i < LUT_ENTRIES; i++) {
-    const t = i / (LUT_ENTRIES - 1);
-    const [r, g, b] = sampleColormapStops(stopColors, t);
-    const offset = i * 4;
-    palette[offset] = r;
-    palette[offset + 1] = g;
-    palette[offset + 2] = b;
-    palette[offset + 3] = alphaLut[offset + 3] ?? 255;
-  }
-
-  return palette;
-}
-
 function applyColormapToChannel(volume: Volume, channelIndex: number): void {
-  if (!volume) {
-    return;
-  }
-  const channel = volume.getChannel(channelIndex);
-  if (!channel || !channel.loaded) {
-    return;
-  }
-
-  const channelGui = myState.channelGui[channelIndex];
-  const isLabelColorizeActive = !!channelGui?.colorizeEnabled && channelGui.colorizeAlpha > 0;
-  if (isLabelColorizeActive) {
-    return;
-  }
-
-  const colormap = colorizercolormaps[myState.colormap];
-  if (!colormap || !colormap.stops || colormap.stops.length === 0) {
-    volume.setColorPaletteAlpha(channelIndex, 0);
-    return;
-  }
-
-  const palette = buildColormapPalette(colormap.stops, channel.lut.lut);
-  volume.setColorPalette(channelIndex, palette);
-  volume.setColorPaletteAlpha(channelIndex, 1);
+  colormapController?.applyColormapToChannel(volume, channelIndex);
 }
 
 function applyColormapToVolume(volume: Volume): void {
-  if (!volume || !view3D) {
-    return;
-  }
-  for (let i = 0; i < volume.numChannels; i++) {
-    applyColormapToChannel(volume, i);
-  }
-  view3D.updateLuts(volume);
+  colormapController?.applyColormapToVolume(volume);
+}
+
+function getStateColorizeFeature(): ColorizeFeature | null {
+  return colormapController?.getStateColorizeFeature() ?? null;
 }
 
 function syncColorInputsToState() {
@@ -1271,7 +1068,13 @@ function main() {
   });
   histogramController.setupInteractions();
 
-  setupColorizeControls();
+  colormapController = createColormapController({
+    state: myState,
+    getVolume: () => myState.volume,
+    getView3D: () => view3D,
+  });
+  colormapController.setupColorizeControls();
+
   setupCropControls();
   setupSliceSelectorControls();
   setupGui(el);
