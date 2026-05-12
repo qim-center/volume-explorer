@@ -533,6 +533,10 @@ export class View3d {
     this.canvas3d.redraw();
   }
 
+  getViewMode(): Axis | undefined {
+    return this.image?.getViewMode();
+  }
+
   setZSlice(volume: Volume, slice: number): boolean {
     if (this.image?.setZSlice(slice)) {
       this.canvas3d.redraw();

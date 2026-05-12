@@ -245,6 +245,11 @@ export class Lut {
     return this.createFromControlPoints(this.controlPoints);
   }
 
+  createNoTransparency(): Lut {
+    this.controlPoints = createFullRangeControlPoints(1, 1);
+    return this.createFromControlPoints(this.controlPoints);
+  }
+
   /**
    * Generate a Window/level lookup table
    * @return {Lut}
