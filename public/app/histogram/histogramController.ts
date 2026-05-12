@@ -7,10 +7,11 @@ interface HistogramControllerOptions {
   selection: HistogramSelection;
   getVolume: () => Volume;
   getView3D: () => View3d;
+  onLutUpdated?: (volume: Volume, channelIndex: number) => void;
 }
 
 export function createHistogramController(options: HistogramControllerOptions) {
-  const { canvas, selection, getVolume, getView3D } = options;
+  const { canvas, selection, getVolume, getView3D, onLutUpdated } = options;
   let histogramHandleAnimationFrame: number | null = null;
 
   const drawHistogramFromVolume = (volume: Volume, channelIndex: number): void => {
@@ -191,6 +192,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
 
     const lut = new Lut().createFromMinMax(min, max);
     volume.setLut(channelIndex, lut);
+    onLutUpdated?.(volume, channelIndex);
     getView3D().updateLuts(volume);
   };
 

@@ -168,6 +168,11 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
       globalOpacitySlider.disabled = isSliceMode;
     }
 
+    const globalOpacityInput = document.getElementById("global-opacity-input") as HTMLInputElement | null;
+    if (globalOpacityInput) {
+      globalOpacityInput.disabled = isSliceMode;
+    }
+
     const globalOpacitySection = globalOpacitySlider?.closest(".controls-item") as HTMLElement | null;
     setUiSectionDisabled(globalOpacitySection, isSliceMode);
   }

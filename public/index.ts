@@ -37,6 +37,7 @@ import {
 import { bindPlaybackAndRenderControls, bindPrimaryViewControls } from "./app/ui/eventBinder";
 import { getAppUiElements } from "./app/ui/elementRegistry";
 import { createHistogramController } from "./app/histogram/histogramController";
+import { createColormapController } from "./app/colormap/colormapController";
 import { createLoaderOrchestration } from "./app/loaders/loaderOrchestration";
 import { rgb01ToHex, rgb255ToHex } from "./app/utils/color";
 import { densitySliderToView3D, gammaSliderToImageValues } from "./app/utils/math";
@@ -71,6 +72,7 @@ const getNumberOfTimesteps = (): number => myState.totalFrames || myState.volume
 
 const histogramSelection = createHistogramSelection();
 let histogramController: ReturnType<typeof createHistogramController> | null = null;
+let colormapController: ReturnType<typeof createColormapController> | null = null;
 const cropSliceManager = createCropSliceManager({
   state: myState,
   getView3D: () => view3D,
@@ -298,7 +300,7 @@ function showChannelUI(volume: Volume) {
   myState.channelFolderNames = [];
   for (let i = 0; i < nChannels; ++i) {
     myState.channelGui.push({
-      colorD: [...myState.foregroundColor] as [number, number, number],
+      colorD: [255, 255, 255] as [number, number, number],
       colorS: [0, 0, 0],
       colorE: [0, 0, 0],
       window: 1.0,
@@ -312,6 +314,7 @@ function showChannelUI(volume: Volume) {
         return function () {
           const lut = new Lut().createFullRange();
           volume.setLut(j, lut);
+          applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
             histogramSelection.minBin = 0;
@@ -326,6 +329,7 @@ function showChannelUI(volume: Volume) {
           const [hmin, hmax] = volume.getHistogram(j).findAutoIJBins();
           const lut = new Lut().createFromMinMax(hmin, hmax);
           volume.setLut(j, lut);
+          applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
             histogramSelection.minBin = hmin;
@@ -340,6 +344,7 @@ function showChannelUI(volume: Volume) {
           const [b, e] = volume.getHistogram(j).findAutoMinMax();
           const lut = new Lut().createFromMinMax(b, e);
           volume.setLut(j, lut);
+          applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
             histogramSelection.minBin = b;
@@ -354,6 +359,7 @@ function showChannelUI(volume: Volume) {
           const [hmin, hmax] = volume.getHistogram(j).findBestFitBins();
           const lut = new Lut().createFromMinMax(hmin, hmax);
           volume.setLut(j, lut);
+          applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
             histogramSelection.minBin = hmin;
@@ -369,6 +375,7 @@ function showChannelUI(volume: Volume) {
           const hmax = volume.getHistogram(j).findBinOfPercentile(0.983);
           const lut = new Lut().createFromMinMax(hmin, hmax);
           volume.setLut(j, lut);
+          applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
             histogramSelection.minBin = hmin;
@@ -386,7 +393,7 @@ function showChannelUI(volume: Volume) {
           if (myState.channelGui[j].colorizeEnabled) {
             volume.setColorPaletteAlpha(j, myState.channelGui[j].colorizeAlpha);
           } else {
-            volume.setColorPaletteAlpha(j, 0);
+            applyColormapToChannel(volume, j);
           }
 
           view3D.updateLuts(volume);
@@ -547,11 +554,6 @@ function showChannelUI(volume: Volume) {
       );
   }
 
-  const objectColorInput = document.getElementById("objectColor") as HTMLInputElement | null;
-  if (objectColorInput && myState.channelGui.length > 0) {
-    objectColorInput.value = rgb255ToHex(myState.foregroundColor);
-  }
-
   for (let channelIndex = 0; channelIndex < myState.channelGui.length; channelIndex++) {
     view3D.updateChannelMaterial(
       volume,
@@ -617,6 +619,7 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   view3D.setVolumeChannelEnabled(currentVol, channelIndex, myState.channelGui[channelIndex].enabled);
 
   view3D.updateActiveChannels(currentVol);
+  applyColormapToChannel(currentVol, channelIndex);
   view3D.updateLuts(currentVol);
 
   if (currentVol.isLoaded()) {
@@ -652,7 +655,7 @@ function onVolumeCreated(name: string, volume: Volume) {
   setInitialRenderMode();
 
   view3D.updateActiveChannels(myState.volume);
-  view3D.updateLuts(myState.volume);
+  applyColormapToVolume(myState.volume);
   view3D.updateLights(myState.lights);
   view3D.updateDensity(myState.volume, densitySliderToView3D(myState.density));
   view3D.updateExposure(myState.exposure);
@@ -754,83 +757,24 @@ const { loadTestData, loadVolume } = createLoaderOrchestration({
   goToZSlice,
 });
 
-function getStateColorizeFeature(): ColorizeFeature | null {
-  if (myState.colorizeEnabled) {
-    const feature = colorizerfeatures[myState.feature];
-    const colormap = colorizercolormaps[myState.colormap].tex;
-    return {
-      idsToFeatureValue: feature.featureTex,
-      featureValueToColor: colormap,
-      outlierData: feature.outlierData,
-      inRangeIds: feature.inRangeIds,
-      featureMin: myState.featureMin,
-      featureMax: myState.featureMax,
-      outlineColor: new Color(0xffffff),
-      outlineAlpha: 1.0,
-      outlierColor: new Color(0x444444),
-      outOfRangeColor: new Color(0x444444),
-      outlierDrawMode: 0,
-      outOfRangeDrawMode: 0,
-      hideOutOfRange: false,
-      frameToGlobalIdLookup: new Map(),
-      useRepeatingColor: false,
-    };
-  } else {
-    return null;
-  }
-}
-
-function setupColorizeControls() {
-  const colorizeButton = document.getElementById("colorize") as HTMLButtonElement;
-  colorizeButton?.addEventListener("click", () => {
-    myState.colorizeEnabled = !myState.colorizeEnabled;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const segChannelInput = document.getElementById("segchannel") as HTMLInputElement;
-  segChannelInput?.addEventListener("change", () => {
-    const channelIndex = Number(segChannelInput.value);
-    myState.colorizeChannel = channelIndex;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const colormapInput = document.getElementById("colormap") as HTMLSelectElement;
-  colormapInput?.addEventListener("change", () => {
-    const colormap = colormapInput.value;
-    myState.colormap = colormap;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const featureInput = document.getElementById("feature") as HTMLSelectElement;
-  featureInput?.addEventListener("change", () => {
-    const feature = featureInput.value;
-    myState.feature = feature;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const featureMinInput = document.getElementById("featmin") as HTMLInputElement;
-  featureMinInput?.addEventListener("change", () => {
-    const featureMin = Number(featureMinInput.value) / 100.0;
-    console.log("featureMin: " + featureMin);
-    myState.featureMin = featureMin;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-
-  const featureMaxInput = document.getElementById("featmax") as HTMLInputElement;
-  featureMaxInput?.addEventListener("change", () => {
-    const featureMax = Number(featureMaxInput.value) / 100.0;
-    console.log("featureMax: " + featureMax);
-    myState.featureMax = featureMax;
-    view3D.setChannelColorizeFeature(myState.volume, myState.colorizeChannel, getStateColorizeFeature());
-  });
-}
-
 function drawHistogramFromVolume(v: Volume, channelIndex: number) {
   histogramController?.drawHistogramFromVolume(v, channelIndex);
 }
 
 function applyHistogramLutFromBins(channelIndex: number) {
   histogramController?.applyHistogramLutFromBins(channelIndex);
+}
+
+function applyColormapToChannel(volume: Volume, channelIndex: number): void {
+  colormapController?.applyColormapToChannel(volume, channelIndex);
+}
+
+function applyColormapToVolume(volume: Volume): void {
+  colormapController?.applyColormapToVolume(volume);
+}
+
+function getStateColorizeFeature(): ColorizeFeature | null {
+  return colormapController?.getStateColorizeFeature() ?? null;
 }
 
 function syncColorInputsToState() {
@@ -843,11 +787,6 @@ function syncColorInputsToState() {
   if (backgroundColorInput) {
     backgroundColorInput.value = rgb01ToHex(myState.backgroundColor);
   }
-
-  const objectColorInput = document.getElementById("objectColor") as HTMLInputElement | null;
-  if (objectColorInput) {
-    objectColorInput.value = rgb255ToHex(myState.foregroundColor);
-  }
 }
 
 function main() {
@@ -855,6 +794,10 @@ function main() {
   const urlParams = new URLSearchParams(window.location.search);
   const hiddenParam = urlParams.get("hidden")?.trim().toLowerCase();
   const turntableParam = urlParams.get("turntable")?.trim().toLowerCase();
+  const colormapParam = urlParams.get("colormap")?.trim();
+  if (colormapParam && colorizercolormaps[colormapParam]) {
+    myState.colormap = colormapParam;
+  }
   if (hiddenParam === "true") {
     if (ui.controlsPanel) {
       ui.controlsPanel.classList.add("hidden");
@@ -1119,10 +1062,19 @@ function main() {
     selection: histogramSelection,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
+    onLutUpdated: (volume, channelIndex) => {
+      applyColormapToChannel(volume, channelIndex);
+    },
   });
   histogramController.setupInteractions();
 
-  setupColorizeControls();
+  colormapController = createColormapController({
+    state: myState,
+    getVolume: () => myState.volume,
+    getView3D: () => view3D,
+  });
+  colormapController.setupColorizeControls();
+
   setupCropControls();
   setupSliceSelectorControls();
   setupGui(el);

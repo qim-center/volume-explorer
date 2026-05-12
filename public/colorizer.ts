@@ -76,14 +76,19 @@ function loadFeature(): { featureTex: DataTexture; featureMin: number; featureMa
   };
 }
 
+// colormaps from matplotlib
 const colorstops = {
-  viridis: ["#440154", "#3a528b", "#20908c", "#5ec961", "#fde724"],
-  plasma: ["#0d0887", "#46039f", "#7201a8", "#ab5dc2", "#d878b9", "#fca726", "#f0f921"],
+  viridis: ['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'],
+  plasma: ['#0d0887', '#46039f', '#7201a8', '#9c179e', '#bd3786', '#d8576b', '#ed7953', '#fb9f3a', '#fdca26', '#f0f921'],
+  inferno: ['#000004', '#1b0c41', '#4a0c6b', '#781c6d', '#a52c60', '#cf4446', '#ed6925', '#fb9b06', '#f7d13d', '#fcffa4'],
+  magma: ['#000004', '#180f3d', '#440f76', '#721f81', '#9e2f7f', '#cd4071', '#f1605d', '#fd9668', '#feca8d', '#fcfdbf'],
+  cividis: ['#00224e', '#123570', '#3b496c', '#575d6d', '#707173', '#8a8678', '#a59c74', '#c3b369', '#e1cc55', '#fee838']
 };
 
 export const colormaps = {
-  viridis: { stops: colorstops.viridis, tex: loadColormap(colorstops.viridis) },
-  plasma: { stops: colorstops.plasma, tex: loadColormap(colorstops.plasma) },
+  ...Object.fromEntries(
+    Object.entries(colorstops).map(([name, stops]) => [name, { stops, tex: loadColormap(stops) }])
+  ),
 };
 
 export const features = {

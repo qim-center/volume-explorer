@@ -2,7 +2,7 @@ import { View3d } from "../../../src";
 import { State } from "../../types";
 import { CameraMode } from "../state/stateService";
 import { densitySliderToView3D } from "../utils/math";
-import { hexToRgb01, hexToRgb255 } from "../utils/color";
+import { hexToRgb01 } from "../utils/color";
 
 interface BindPrimaryViewControlsOptions {
   state: State;
@@ -99,38 +99,48 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
     state.backgroundColor = hexToRgb01((event.target as HTMLInputElement)?.value, state.backgroundColor);
     view3D.setBackgroundColor(state.backgroundColor);
   });
-  const objectColorBtn = document.getElementById("objectColor");
-  objectColorBtn?.addEventListener("change", (event: Event) => {
-    state.foregroundColor = hexToRgb255((event.target as HTMLInputElement)?.value, state.foregroundColor);
-
-    for (let channelIndex = 0; channelIndex < state.channelGui.length; channelIndex++) {
-      state.channelGui[channelIndex].colorD = [...state.foregroundColor] as [number, number, number];
-      view3D.updateChannelMaterial(
-        state.volume,
-        channelIndex,
-        state.channelGui[channelIndex].colorD,
-        state.channelGui[channelIndex].colorS,
-        state.channelGui[channelIndex].colorE,
-        state.channelGui[channelIndex].glossiness
-      );
-      view3D.updateMaterial(state.volume);
-    }
-  });
 
   const globalOpacitySlider = document.getElementById("global-opacity-slider") as HTMLInputElement | null;
+  const globalOpacityInput = document.getElementById("global-opacity-input") as HTMLInputElement | null;
   if (globalOpacitySlider) {
-    globalOpacitySlider.value = `${state.density / 100}`;
-    globalOpacitySlider.style.setProperty("--value", `${Math.round((state.density / 100) * 100)}`);
+    const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
+    const applyOpacityPercent = (percent: number) => {
+      const clampedPercent = clampPercent(percent);
+      const sliderValue = clampedPercent / 100;
+      state.density = clampedPercent;
+      globalOpacitySlider.value = `${sliderValue}`;
+      globalOpacitySlider.style.setProperty("--value", `${clampedPercent}`);
+      if (globalOpacityInput) {
+        globalOpacityInput.value = `${clampedPercent}`;
+      }
+      view3D.updateDensity(state.volume, densitySliderToView3D(state.density));
+    };
+
+    applyOpacityPercent(state.density);
 
     const onGlobalOpacityInput = () => {
       const sliderValue = Math.min(1, Math.max(0, globalOpacitySlider.valueAsNumber));
-      state.density = sliderValue * 100;
-      globalOpacitySlider.style.setProperty("--value", `${Math.round(sliderValue * 100)}`);
-      view3D.updateDensity(state.volume, densitySliderToView3D(state.density));
+      applyOpacityPercent(sliderValue * 100);
     };
 
     globalOpacitySlider.addEventListener("input", onGlobalOpacityInput);
     globalOpacitySlider.addEventListener("change", onGlobalOpacityInput);
+
+    if (globalOpacityInput) {
+      const onOpacityValueCommit = () => {
+        const nextValue = Number.isFinite(globalOpacityInput.valueAsNumber)
+          ? globalOpacityInput.valueAsNumber
+          : state.density;
+        applyOpacityPercent(nextValue);
+      };
+
+      globalOpacityInput.addEventListener("change", onOpacityValueCommit);
+      globalOpacityInput.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (event.key === "Enter") {
+          onOpacityValueCommit();
+        }
+      });
+    }
   }
 }
 

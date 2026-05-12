@@ -8,6 +8,7 @@ import {
   Material,
   Matrix4,
   Mesh,
+  NearestFilter,
   OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
@@ -118,6 +119,26 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
       this.channelData?.cleanup();
       this.channelData = new FusedChannelData(atlasSize.x, atlasSize.y);
     }
+
+    this.applyNearestFiltering();
+  }
+
+  private applyNearestFiltering(): void {
+    const fusedTexture = this.channelData.getFusedTexture();
+    if (fusedTexture.minFilter !== NearestFilter || fusedTexture.magFilter !== NearestFilter) {
+      fusedTexture.minFilter = NearestFilter;
+      fusedTexture.magFilter = NearestFilter;
+      fusedTexture.needsUpdate = true;
+    }
+
+    if (
+      this.channelData.maskTexture.minFilter !== NearestFilter ||
+      this.channelData.maskTexture.magFilter !== NearestFilter
+    ) {
+      this.channelData.maskTexture.minFilter = NearestFilter;
+      this.channelData.maskTexture.magFilter = NearestFilter;
+      this.channelData.maskTexture.needsUpdate = true;
+    }
   }
 
   public updateSettings(newSettings: VolumeRenderSettings, dirtyFlags?: number | SettingsFlags) {
@@ -186,7 +207,8 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {
-      this.setUniform("interpolationEnabled", this.settings.useInterpolation);
+      // Always use nearest-neighbor sampling in slice view to preserve pixel edges.
+      this.setUniform("interpolationEnabled", false);
       this.setUniform("iResolution", this.settings.resolution);
     }
 

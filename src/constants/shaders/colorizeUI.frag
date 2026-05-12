@@ -1,9 +1,14 @@
 precision highp float;
 precision highp int;
 precision highp usampler2D;
+precision highp sampler2D;
 precision highp sampler3D;
 
 uniform sampler2D featureData;
+uniform usampler2D intensityTexture;
+/** Min and max intensity values for scalar-based colorization */
+uniform float intensityMin;
+uniform float intensityMax;
 /** Min and max feature values that define the endpoints of the color map. Values
  * outside the range will be clamped to the nearest endpoint.
  */
@@ -39,6 +44,7 @@ uniform uint outOfRangeDrawMode;
 
 uniform uint highlightedId;
 
+uniform bool useColormapScalar;
 uniform bool useRepeatingCategoricalColors;
 
 // src texture is the raw volume intensity data
@@ -99,6 +105,11 @@ float getFeatureVal(uint id) {
   // Data buffer starts at 0, non-background segmentation IDs start at 1
   return getFloatFromTex(featureData, int(id) - 1).r;
 }
+float getIntensityVal(ivec2 uv) {
+  // Get intensity value from the intensity texture (unsigned integer format)
+  uint rawIntensity = texelFetch(intensityTexture, uv, 0).r;
+  return float(rawIntensity);
+}
 uint getOutlierVal(uint id) {
   // Data buffer starts at 0, non-background segmentation IDs start at 1
   return getUintFromTex(outlierData, int(id) - 1).r;
@@ -125,33 +136,45 @@ vec4 getObjectColor(ivec2 sUv, float opacity) {
   //   return vec4(outlineColor, 1.0);
   // }
 
-  float featureVal = getFeatureVal(id);
-  uint outlierVal = getOutlierVal(id);
-  float normFeatureVal = (featureVal - featureColorRampMin) / (featureColorRampMax - featureColorRampMin);
-
-  // Use the selected draw mode to handle out of range and outlier values;
-  // otherwise color with the color ramp as usual.
-  bool isInRange = getIsInRange(id);
-  bool isOutlier = getIsOutlier(featureVal, outlierVal);
-  bool isMissingData = (id == MISSING_DATA_ID);
-
-  // Features outside the filtered/thresholded range will all be treated the same (use `outOfRangeDrawColor`).
-  // Features inside the range can either be outliers or standard values, and are colored accordingly.
   vec4 color;
-  if (isMissingData) { 
-    // TODO: Add color controls for missing data
-    color = getColorFromDrawMode(outlierDrawMode, outlierColor);
-  } else if (isInRange) {
-    if (isOutlier) {
-      color = getColorFromDrawMode(outlierDrawMode, outlierColor);
-    } else if (useRepeatingCategoricalColors) {
-      color = getCategoricalColor(featureVal);
-    } else {
-      color = getColorRamp(normFeatureVal);
-    }
+  
+  if (useColormapScalar) {
+    // Use intensity-based colorization with colormap
+    float intensityVal = getIntensityVal(sUv);
+    // Normalize intensity value using channel's min/max
+    float normIntensityVal = (intensityVal - intensityMin) / (intensityMax - intensityMin);
+    normIntensityVal = clamp(normIntensityVal, 0.0, 1.0);
+    color = getColorRamp(normIntensityVal);
   } else {
-    color = getColorFromDrawMode(outOfRangeDrawMode, outOfRangeColor);
+    // Use feature-based colorization (original behavior)
+    float featureVal = getFeatureVal(id);
+    uint outlierVal = getOutlierVal(id);
+    float normFeatureVal = (featureVal - featureColorRampMin) / (featureColorRampMax - featureColorRampMin);
+
+    // Use the selected draw mode to handle out of range and outlier values;
+    // otherwise color with the color ramp as usual.
+    bool isInRange = getIsInRange(id);
+    bool isOutlier = getIsOutlier(featureVal, outlierVal);
+    bool isMissingData = (id == MISSING_DATA_ID);
+
+    // Features outside the filtered/thresholded range will all be treated the same (use `outOfRangeDrawColor`).
+    // Features inside the range can either be outliers or standard values, and are colored accordingly.
+    if (isMissingData) { 
+      // TODO: Add color controls for missing data
+      color = getColorFromDrawMode(outlierDrawMode, outlierColor);
+    } else if (isInRange) {
+      if (isOutlier) {
+        color = getColorFromDrawMode(outlierDrawMode, outlierColor);
+      } else if (useRepeatingCategoricalColors) {
+        color = getCategoricalColor(featureVal);
+      } else {
+        color = getColorRamp(normFeatureVal);
+      }
+    } else {
+      color = getColorFromDrawMode(outOfRangeDrawMode, outOfRangeColor);
+    }
   }
+  
   color.a *= opacity;
   return color;
 }
