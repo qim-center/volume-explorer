@@ -21,7 +21,7 @@ import {
   TextureDataType,
 } from "three";
 import Histogram from "./Histogram.js";
-import { Lut, LUT_ARRAY_LENGTH } from "./Lut.js";
+import { Lut, LUT_ENTRIES, LUT_ARRAY_LENGTH } from "./Lut.js";
 import { TypedArray, NumberType, ARRAY_CONSTRUCTORS } from "./types.js";
 
 interface ChannelImageData {
@@ -61,7 +61,7 @@ export default class Channel {
 
     // on gpu
     this.dataTexture = new DataTexture(new Uint8Array(), 0, 0);
-    this.lutTexture = new DataTexture(new Uint8Array(LUT_ARRAY_LENGTH), 256, 1, RGBAFormat, UnsignedByteType);
+    this.lutTexture = new DataTexture(new Uint8Array(LUT_ARRAY_LENGTH), LUT_ENTRIES, 1, RGBAFormat, UnsignedByteType);
     this.lutTexture.minFilter = this.lutTexture.magFilter = LinearFilter;
     this.lutTexture.generateMipmaps = false;
 

@@ -1,17 +1,43 @@
+import { Color } from "three";
 import { Lut, View3d, Volume } from "../../../src";
 import { HistogramSelection } from "../state/stateService";
 import { histogramBinFromX } from "../utils/math";
+import { colormaps } from "../../colorizer";
 
 interface HistogramControllerOptions {
   canvas: HTMLCanvasElement | null;
   selection: HistogramSelection;
   getVolume: () => Volume;
   getView3D: () => View3d;
+  getColormapName?: () => string;
+  getColormapMin?: () => number;
+  getColormapMax?: () => number;
   onLutUpdated?: (volume: Volume, channelIndex: number) => void;
 }
 
+const sampleColormapStops = (stopColors: Color[], t: number): [number, number, number] => {
+  if (stopColors.length === 0) {
+    return [255, 255, 255];
+  }
+  if (stopColors.length === 1) {
+    const only = stopColors[0];
+    return [Math.round(only.r * 255), Math.round(only.g * 255), Math.round(only.b * 255)];
+  }
+
+  const clamped = Math.min(1, Math.max(0, t));
+  const scaled = clamped * (stopColors.length - 1);
+  const index = Math.min(stopColors.length - 2, Math.floor(scaled));
+  const frac = scaled - index;
+  const a = stopColors[index];
+  const b = stopColors[index + 1];
+  const r = a.r + (b.r - a.r) * frac;
+  const g = a.g + (b.g - a.g) * frac;
+  const bcol = a.b + (b.b - a.b) * frac;
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(bcol * 255)];
+};
+
 export function createHistogramController(options: HistogramControllerOptions) {
-  const { canvas, selection, getVolume, getView3D, onLutUpdated } = options;
+  const { canvas, selection, getVolume, getView3D, getColormapName, getColormapMin, getColormapMax, onLutUpdated } = options;
   let histogramHandleAnimationFrame: number | null = null;
 
   const drawHistogramFromVolume = (volume: Volume, channelIndex: number): void => {
@@ -58,11 +84,30 @@ export function createHistogramController(options: HistogramControllerOptions) {
 
     const barWidth = w / bins.length;
 
-    ctx.fillStyle = "#b3b3b3";
+    const colormapName = getColormapName?.();
+    const colormap = colormapName ? colormaps[colormapName] : null;
+    let colormapStopColors: Color[] | null = null;
+    const maxBinIndex = bins.length - 1;
+    const cmMinRaw = getColormapMin?.() ?? 0;
+    const cmMaxRaw = getColormapMax?.() ?? 255;
+    const cmMin = maxBinIndex ? Math.round(cmMinRaw / 255 * maxBinIndex) : 0;
+    const cmMax = maxBinIndex ? Math.round(cmMaxRaw / 255 * maxBinIndex) : 0;
+    const cmRange = cmMax - cmMin || 1;
+    if (colormap && colormap.stops && colormap.stops.length > 0) {
+      colormapStopColors = colormap.stops.map((stop: string) => new Color(stop));
+    }
 
     for (let i = 0; i < bins.length; i++) {
       const v0 = Math.log1p(bins[i]) / maxLog;
       const barHeight = v0 * plotH;
+
+      if (colormapStopColors) {
+        const t = (i - cmMin) / cmRange;
+        const [r, g, b] = sampleColormapStops(colormapStopColors, t);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+      } else {
+        ctx.fillStyle = "#b3b3b3";
+      }
 
       ctx.fillRect(i * barWidth, plotH - barHeight, Math.max(1, barWidth), barHeight);
     }
@@ -192,11 +237,17 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const min = selection.minBin;
     const max = selection.maxBin;
 
+    const hist = volume.getHistogram(channelIndex) as any;
+    const numBins = (hist.bins ?? hist.histogram)?.length;
+    const scale = numBins && numBins > 1 ? 255 / (numBins - 1) : 1;
+    const lutMin = Math.round(min * scale);
+    const lutMax = Math.round(max * scale);
+
     const view3d = getView3D();
     const viewMode = view3d.getViewMode?.();
     const lut = viewMode !== undefined && viewMode !== ""
       ? new Lut().createNoTransparency()
-      : new Lut().createFromMinMax(min, max);
+      : new Lut().createFromMinMax(lutMin, lutMax);
     volume.setLut(channelIndex, lut);
     onLutUpdated?.(volume, channelIndex);
     view3d.updateLuts(volume);

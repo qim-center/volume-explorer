@@ -6,8 +6,8 @@ import VolumeMaker from "./VolumeMaker.js";
 import VolumeCache from "./VolumeCache.js";
 import RequestQueue from "./utils/RequestQueue.js";
 import SubscribableRequestQueue from "./utils/SubscribableRequestQueue.js";
-import Histogram from "./Histogram.js";
-import { Lut, remapControlPoints } from "./Lut.js";
+import Histogram, { NBINS } from "./Histogram.js";
+import { Lut, LUT_ENTRIES, remapControlPoints } from "./Lut.js";
 import { type ColorizeFeature, type NumberType, ViewportCorner } from "./types.js";
 import { VolumeFileFormat, createVolumeLoader, PrefetchDirection } from "./loaders/index.js";
 import { LoadSpec } from "./loaders/IVolumeLoader.js";
@@ -37,6 +37,8 @@ export type { HistogramRangeStrategy } from "./histogram/HistogramRangeStrategie
 export { PercentileStrategy, ImageJAutoStrategy, ThresholdStrategy } from "./histogram/HistogramRangeStrategies.js";
 export {
   Histogram,
+  NBINS,
+  LUT_ENTRIES,
   Lut,
   Line3d,
   VectorArrows3d,

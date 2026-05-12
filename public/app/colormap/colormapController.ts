@@ -1,12 +1,13 @@
 import { Color } from "three";
-import { View3d, Volume, ColorizeFeature } from "../../../src";
+import { View3d, Volume, ColorizeFeature, LUT_ENTRIES } from "../../../src";
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "../../colorizer";
 
-const LUT_ENTRIES = 256;
 const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
 
 interface ColormapControllerState {
   colormap: string;
+  colormapMin: number;
+  colormapMax: number;
   colorizeEnabled: boolean;
   colorizeChannel: number;
   feature: string;
@@ -19,10 +20,12 @@ interface ColormapControllerOptions {
   state: ColormapControllerState;
   getVolume: () => Volume;
   getView3D: () => View3d;
+  getColormapRange?: () => { minBin: number; maxBin: number };
+  onColormapChange?: () => void;
 }
 
 export function createColormapController(options: ColormapControllerOptions) {
-  const { state, getVolume, getView3D } = options;
+  const { state, getVolume, getView3D, getColormapRange, onColormapChange } = options;
 
   const sampleColormapStops = (stopColors: Color[], t: number): [number, number, number] => {
     if (stopColors.length === 0) {
@@ -45,12 +48,15 @@ export function createColormapController(options: ColormapControllerOptions) {
     return [Math.round(r * 255), Math.round(g * 255), Math.round(bcol * 255)];
   };
 
-  const buildColormapPalette = (stops: string[], alphaLut: Uint8Array): Uint8Array => {
+  const buildColormapPalette = (stops: string[], alphaLut: Uint8Array, minBin?: number, maxBin?: number): Uint8Array => {
     const palette = new Uint8Array(LUT_ARRAY_LENGTH);
     const stopColors = stops.map((stop) => new Color(stop));
+    const lo = minBin ?? 0;
+    const hi = maxBin ?? LUT_ENTRIES - 1;
+    const range = hi - lo || 1;
 
     for (let i = 0; i < LUT_ENTRIES; i++) {
-      const t = i / (LUT_ENTRIES - 1);
+      const t = (i - lo) / range;
       const [r, g, b] = sampleColormapStops(stopColors, t);
       const offset = i * 4;
       palette[offset] = r;
@@ -62,7 +68,7 @@ export function createColormapController(options: ColormapControllerOptions) {
     return palette;
   };
 
-  const applyColormapToChannel = (volume: Volume, channelIndex: number): void => {
+  const applyColormapToChannel = (volume: Volume, channelIndex: number, minBin?: number, maxBin?: number): void => {
     if (!volume) {
       return;
     }
@@ -83,7 +89,8 @@ export function createColormapController(options: ColormapControllerOptions) {
       return;
     }
 
-    const palette = buildColormapPalette(colormap.stops, channel.lut.lut);
+    const range = getColormapRange?.();
+    const palette = buildColormapPalette(colormap.stops, channel.lut.lut, minBin ?? range?.minBin, maxBin ?? range?.maxBin);
     volume.setColorPalette(channelIndex, palette);
     volume.setColorPaletteAlpha(channelIndex, 1);
   };
@@ -186,6 +193,7 @@ export function createColormapController(options: ColormapControllerOptions) {
         const volume = getVolume();
         const view3D = getView3D();
         applyColormapToVolume(volume);
+        onColormapChange?.();
         view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
         view3D.redraw();
         setColormapInUrl(colormapName);
@@ -246,11 +254,65 @@ export function createColormapController(options: ColormapControllerOptions) {
     });
   };
 
+  const syncColormapRangeFill = (minInput: HTMLInputElement, maxInput: HTMLInputElement, fill: HTMLElement): void => {
+    const minVal = Number(minInput.value);
+    const maxVal = Number(maxInput.value);
+    fill.style.left = `${(minVal / 255) * 100}%`;
+    fill.style.right = `${(1 - maxVal / 255) * 100}%`;
+  };
+
+  const setupColormapRangeControls = (): void => {
+    const minInput = document.getElementById("colormap-range-min") as HTMLInputElement | null;
+    const maxInput = document.getElementById("colormap-range-max") as HTMLInputElement | null;
+    const fill = document.getElementById("colormap-range-fill") as HTMLElement | null;
+    if (!minInput || !maxInput || !fill) {
+      return;
+    }
+
+    minInput.value = String(state.colormapMin);
+    maxInput.value = String(state.colormapMax);
+    syncColormapRangeFill(minInput, maxInput, fill);
+
+    const onMinInput = () => {
+      const b = Number(minInput.value);
+      state.colormapMin = b;
+      if (b > Number(maxInput.value)) {
+        maxInput.value = String(b);
+        state.colormapMax = b;
+      }
+      syncColormapRangeFill(minInput, maxInput, fill);
+      const volume = getVolume();
+      if (volume) {
+        applyColormapToVolume(volume);
+      }
+      onColormapChange?.();
+    };
+
+    const onMaxInput = () => {
+      const b = Number(maxInput.value);
+      state.colormapMax = b;
+      if (b < Number(minInput.value)) {
+        minInput.value = String(b);
+        state.colormapMin = b;
+      }
+      syncColormapRangeFill(minInput, maxInput, fill);
+      const volume = getVolume();
+      if (volume) {
+        applyColormapToVolume(volume);
+      }
+      onColormapChange?.();
+    };
+
+    minInput.addEventListener("input", onMinInput);
+    maxInput.addEventListener("input", onMaxInput);
+  };
+
   return {
     applyColormapToChannel,
     applyColormapToVolume,
     getStateColorizeFeature,
     setColormapInUrl,
     setupColorizeControls,
+    setupColormapRangeControls,
   };
 }

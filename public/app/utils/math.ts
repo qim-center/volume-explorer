@@ -6,8 +6,10 @@ export function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+export const OPACITY_MULTIPLIER = 0.25;
+
 export function densitySliderToView3D(density: number): number {
-  return density / 50.0;
+  return (density / 50.0) * OPACITY_MULTIPLIER;
 }
 
 export function gammaSliderToImageValues(sliderValues: [number, number, number]): [number, number, number] {

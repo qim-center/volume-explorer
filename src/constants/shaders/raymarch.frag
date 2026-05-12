@@ -222,7 +222,7 @@ vec4 integrateVolume(vec4 eye_o,vec4 eye_d,
       col.xyz *= BRIGHTNESS;
       C = max(col, C);
     } else {
-      col = luma2Alpha(col, GAMMA_MIN, GAMMA_MAX, GAMMA_SCALE);
+      // col = luma2Alpha(col, GAMMA_MIN, GAMMA_MAX, GAMMA_SCALE);  // bypassed — colormap range should not affect opacity
       col.xyz *= BRIGHTNESS;
       // for practical use the density only matters for regular volume integration
       col.w *= DENSITY;

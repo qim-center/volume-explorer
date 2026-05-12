@@ -317,8 +317,11 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
+            const hist = volume.getHistogram(j) as any;
+            const bins = hist?.bins ?? hist?.histogram;
+            const maxBin = bins ? bins.length - 1 : 0;
             histogramSelection.minBin = 0;
-            histogramSelection.maxBin = 255;
+            histogramSelection.maxBin = maxBin;
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -327,7 +330,10 @@ function showChannelUI(volume: Volume) {
       autoIJ: (function (j) {
         return function () {
           const [hmin, hmax] = volume.getHistogram(j).findAutoIJBins();
-          const lut = new Lut().createFromMinMax(hmin, hmax);
+          const lut = new Lut().createFromMinMax(
+            scaleHistogramBinToLut(volume, j, hmin),
+            scaleHistogramBinToLut(volume, j, hmax)
+          );
           volume.setLut(j, lut);
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
@@ -342,7 +348,10 @@ function showChannelUI(volume: Volume) {
       auto0: (function (j) {
         return function () {
           const [b, e] = volume.getHistogram(j).findAutoMinMax();
-          const lut = new Lut().createFromMinMax(b, e);
+          const lut = new Lut().createFromMinMax(
+            scaleHistogramBinToLut(volume, j, b),
+            scaleHistogramBinToLut(volume, j, e)
+          );
           volume.setLut(j, lut);
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
@@ -357,7 +366,10 @@ function showChannelUI(volume: Volume) {
       bestFit: (function (j) {
         return function () {
           const [hmin, hmax] = volume.getHistogram(j).findBestFitBins();
-          const lut = new Lut().createFromMinMax(hmin, hmax);
+          const lut = new Lut().createFromMinMax(
+            scaleHistogramBinToLut(volume, j, hmin),
+            scaleHistogramBinToLut(volume, j, hmax)
+          );
           volume.setLut(j, lut);
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
@@ -373,7 +385,10 @@ function showChannelUI(volume: Volume) {
         return function () {
           const hmin = volume.getHistogram(j).findBinOfPercentile(0.5);
           const hmax = volume.getHistogram(j).findBinOfPercentile(0.983);
-          const lut = new Lut().createFromMinMax(hmin, hmax);
+          const lut = new Lut().createFromMinMax(
+            scaleHistogramBinToLut(volume, j, hmin),
+            scaleHistogramBinToLut(volume, j, hmax)
+          );
           volume.setLut(j, lut);
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
@@ -612,7 +627,10 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   const hist = v.getHistogram(channelIndex);
   const hmin = hist.findBinOfPercentile(LUT_MIN_PERCENTILE);
   const hmax = hist.findBinOfPercentile(LUT_MAX_PERCENTILE);
-  const lut = new Lut().createFromMinMax(hmin, hmax);
+  const lut = new Lut().createFromMinMax(
+    scaleHistogramBinToLut(v, channelIndex, hmin),
+    scaleHistogramBinToLut(v, channelIndex, hmax)
+  );
   v.setLut(channelIndex, lut);
 
   view3D.onVolumeData(currentVol, [channelIndex]);
@@ -763,6 +781,14 @@ function drawHistogramFromVolume(v: Volume, channelIndex: number) {
 
 function applyHistogramLutFromBins(channelIndex: number) {
   histogramController?.applyHistogramLutFromBins(channelIndex);
+}
+
+function scaleHistogramBinToLut(volume: Volume, channelIndex: number, bin: number): number {
+  const hist = volume.getHistogram(channelIndex) as any;
+  const bins = hist?.bins ?? hist?.histogram;
+  const numBins = bins?.length;
+  const scale = numBins && numBins > 1 ? 255 / (numBins - 1) : 1;
+  return Math.round(bin * scale);
 }
 
 function applyColormapToChannel(volume: Volume, channelIndex: number): void {
@@ -1062,6 +1088,9 @@ function main() {
     selection: histogramSelection,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
+    getColormapName: () => myState.colormap,
+    getColormapMin: () => myState.colormapMin,
+    getColormapMax: () => myState.colormapMax,
     onLutUpdated: (volume, channelIndex) => {
       applyColormapToChannel(volume, channelIndex);
     },
@@ -1078,8 +1107,13 @@ function main() {
     state: myState,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
+    getColormapRange: () => ({ minBin: myState.colormapMin, maxBin: myState.colormapMax }),
+    onColormapChange: () => {
+      histogramController?.drawHistogramFromVolume(myState.volume, 0);
+    },
   });
   colormapController.setupColorizeControls();
+  colormapController.setupColormapRangeControls();
 
   setupCropControls();
   setupSliceSelectorControls();
