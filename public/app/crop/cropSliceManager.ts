@@ -527,6 +527,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     }
 
     const resetCropBtn = document.getElementById("crop-reset-button") as HTMLButtonElement | null;
+    const centerCropBtn = document.getElementById("crop-center-button") as HTMLButtonElement | null;
     const copyCropBtn = document.getElementById("crop-copy-indeces-button") as HTMLButtonElement | null;
 
     copyCropBtn?.addEventListener("click", async () => {
@@ -553,6 +554,21 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
 
       syncCropInputsFromState();
       applyCropRegionFromState();
+    });
+
+    centerCropBtn?.addEventListener("click", () => {
+      const xBounds = getEffectiveAxisCropBounds("x");
+      const yBounds = getEffectiveAxisCropBounds("y");
+      const zBounds = getEffectiveAxisCropBounds("z");
+      getView3D().updateVisibleRegion(
+        state.volume,
+        xBounds.min,
+        xBounds.max,
+        yBounds.min,
+        yBounds.max,
+        zBounds.min,
+        zBounds.max
+      );
     });
 
     syncCropInputsFromState();
