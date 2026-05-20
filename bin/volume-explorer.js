@@ -45,7 +45,7 @@ Options:
   -s, --src <url>       Dataset URL to preload
       --scale <value>   Initial scale level, for example 0, 1, or last
       --hidden          Start with the controls panel hidden
-      --turntable       Enable hover-activated turntable mode
+      --turntable       Enable turntable mode, pausing while hovered
       --open            Open the browser after starting
       --no-open         Do not open the browser after starting
   -h, --help            Show this help message

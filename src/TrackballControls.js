@@ -57,7 +57,7 @@ class TrackballControls extends EventDispatcher {
     // Set to true to automatically rotate around the target
     // If auto-rotate is enabled, you must call controls.update() in your animation loop
     this.autoRotate = false;
-    this.autoRotateSpeed = 2.0; // 30 seconds per round when fps is 60
+    this.autoRotateSpeed = 2.0;
 
     // internals
 
@@ -126,8 +126,18 @@ class TrackballControls extends EventDispatcher {
       };
     })();
 
+    const autoRotateTimeScale = 0.0005;
+    const autoRotateXSpeedRange = { min: 0.3, max: 1.2 };
+    const autoRotateYSpeedRange = { min: 0.2, max: 1.5 };
+    const autoRotateYSpeedTimeScale = 0.5;
+    const autoRotateYSpeedPhase = Math.PI * 0.3;
+
     function getAutoRotationAngle(delta) {
       return ((2 * Math.PI) / 60 / 60) * scope.autoRotateSpeed * (delta * 60.0);
+    }
+
+    function mapSineToRange(value, range) {
+      return range.min + ((value + 1) * 0.5) * (range.max - range.min);
     }
 
     this.rotateCamera = (function () {
@@ -147,11 +157,17 @@ class TrackballControls extends EventDispatcher {
         angle *= scope.rotateSpeed;
 
         if (scope.autoRotate && _state === STATE.NONE) {
-          // rotate about vertical axis
+          const time = performance.now() * autoRotateTimeScale;
+          const xSpeedVariation = mapSineToRange(Math.sin(time), autoRotateXSpeedRange);
+          const ySpeedVariation = mapSineToRange(
+            Math.sin(time * autoRotateYSpeedTimeScale + autoRotateYSpeedPhase),
+            autoRotateYSpeedRange
+          );
+
           angle = getAutoRotationAngle(delta);
-          dx = angle;
-          dy = 0;
-          moveDirection.set(angle, 0, 0);
+          dx = angle * xSpeedVariation;
+          dy = angle * ySpeedVariation;
+          moveDirection.set(dx, dy, 0);
         }
 
         if (angle) {
