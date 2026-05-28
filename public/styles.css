@@ -27,6 +27,7 @@ body {
 .panel {
   background-color: rgb(70, 70, 70);
   min-width: 0;
+  min-height: 0;
 }
 
 #controls-panel {
@@ -35,6 +36,17 @@ body {
   max-width: 500px;
   min-width: 400px;
   width: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  #controls-panel {
+    padding: 1rem;
+    min-width: 0;
+    max-width: none;
+  }
 }
 
 #controls-panel .controls-item {
