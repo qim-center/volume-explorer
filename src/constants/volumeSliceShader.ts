@@ -56,6 +56,14 @@ export const sliceShaderUniforms = () => {
       type: "i",
       value: 0,
     },
+    sliceAxis: {
+      type: "i",
+      value: 2,
+    },
+    sliceCoord: {
+      type: "f",
+      value: 0.0,
+    },
     SLICES: {
       type: "f",
       value: 50,

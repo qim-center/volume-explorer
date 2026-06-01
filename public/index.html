@@ -98,10 +98,11 @@
         <div class="controls-item">
           <div class="d-flex align-items-center justify-content-between mb-2">
             <span>View type <span id="slice-view-current" class="slice-view-current"></span></span>
-            <div class="btn-group slice-view-buttons" role="group" aria-label="Slice and 3D view controls">
+            <div class="btn-group slice-view-buttons" role="group" aria-label="Ortho and 3D view controls">
               <button id="Z" type="button" class="btn btn-outline-secondary btn-sm">Z</button>
               <button id="Y" type="button" class="btn btn-outline-secondary btn-sm">Y</button>
               <button id="X" type="button" class="btn btn-outline-secondary btn-sm">X</button>
+              <button id="ORTHO" type="button" class="btn btn-outline-secondary btn-sm">Ortho</button>
               <button id="3D" type="button" class="btn btn-outline-secondary btn-sm is-active">3D</button>
             </div>
           </div>
@@ -112,6 +113,29 @@
               <span id="slice-selector-min" class="slice-selector-bound">0</span>
               <input id="slice-selector-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
               <span id="slice-selector-max" class="slice-selector-bound">0</span>
+            </div>
+          </div>
+
+          <div id="slice-selector-3d-panel" class="slice-selector-panel hidden mb-2">
+            <div class="vstack gap-2">
+              <div class="d-flex align-items-center gap-2 flex-nowrap">
+                <label for="slice-selector-x-slider" class="col-form-label fw-semibold mb-0 text-nowrap">X</label>
+                <span id="slice-selector-x-min" class="slice-selector-bound">0</span>
+                <input id="slice-selector-x-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
+                <span id="slice-selector-x-max" class="slice-selector-bound">0</span>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-nowrap">
+                <label for="slice-selector-y-slider" class="col-form-label fw-semibold mb-0 text-nowrap">Y</label>
+                <span id="slice-selector-y-min" class="slice-selector-bound">0</span>
+                <input id="slice-selector-y-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
+                <span id="slice-selector-y-max" class="slice-selector-bound">0</span>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-nowrap">
+                <label for="slice-selector-z-slider" class="col-form-label fw-semibold mb-0 text-nowrap">Z</label>
+                <span id="slice-selector-z-min" class="slice-selector-bound">0</span>
+                <input id="slice-selector-z-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
+                <span id="slice-selector-z-max" class="slice-selector-bound">0</span>
+              </div>
             </div>
           </div>
 

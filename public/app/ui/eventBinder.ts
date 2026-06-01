@@ -31,6 +31,7 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
     X: document.getElementById("X") as HTMLButtonElement | null,
     Y: document.getElementById("Y") as HTMLButtonElement | null,
     Z: document.getElementById("Z") as HTMLButtonElement | null,
+    ORTHO: document.getElementById("ORTHO") as HTMLButtonElement | null,
     "3D": document.getElementById("3D") as HTMLButtonElement | null,
   };
 
@@ -51,6 +52,7 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
   bindCameraModeButton("X");
   bindCameraModeButton("Y");
   bindCameraModeButton("Z");
+  bindCameraModeButton("ORTHO");
   bindCameraModeButton("3D");
   setActiveCameraModeButton("3D");
   setActiveSliceMode("3D");

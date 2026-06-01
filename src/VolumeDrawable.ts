@@ -32,6 +32,7 @@ import { Light } from "./Light.js";
 import Channel from "./Channel.js";
 import type { VolumeRenderImpl } from "./VolumeRenderImpl.js";
 import Atlas2DSlice from "./Atlas2DSlice.js";
+import Ortho from "./Ortho.js";
 import { VolumeRenderSettings, SettingsFlags, Axis } from "./VolumeRenderSettings.js";
 import ContourPass from "./ContourPass.js";
 
@@ -118,6 +119,7 @@ export default class VolumeDrawable {
         this.renderMode = RenderMode.PATHTRACE;
         this.volumeRendering = new PathTracedVolume(this.volume, this.settings);
         break;
+      case RenderMode.ORTHO:
       case RenderMode.SLICE: // default to raymarch even when slice is selected
       case RenderMode.RAYMARCH:
       default:
@@ -131,7 +133,11 @@ export default class VolumeDrawable {
 
     // draw meshes first, and volume last, for blending and depth test reasons with raymarch
     this.meshVolume = new MeshVolume(this.volume);
-    if (options.renderMode === RenderMode.RAYMARCH || options.renderMode === RenderMode.SLICE) {
+    if (
+      options.renderMode === RenderMode.RAYMARCH ||
+      options.renderMode === RenderMode.SLICE ||
+      options.renderMode === RenderMode.ORTHO
+    ) {
       this.childObjectsGroup.add(this.meshVolume.get3dObject());
       this.childObjects.add(this.meshVolume);
     }
@@ -357,20 +363,32 @@ export default class VolumeDrawable {
   }
   /**
    * Sets the camera mode of the VolumeDrawable.
-   * @param mode Mode can be "3D", or "XY" or "Z", or "YZ" or "X", or "XZ" or "Y".
+   * @param mode Mode can be "3D", "ORTHO", or "XY" or "Z", or "YZ" or "X", or "XZ" or "Y".
    */
   setViewMode(mode: string, volumeRenderModeHint: RenderMode.PATHTRACE | RenderMode.RAYMARCH): void {
-    const axis = this.modeStringToAxis(mode);
+    const isSlice3dMode = mode === "ORTHO";
+    const axis = isSlice3dMode ? Axis.NONE : this.modeStringToAxis(mode);
     this.viewMode = axis;
-    // Force a volume render reset if we have switched to or from Z mode while raymarching is enabled.
-    if (axis === Axis.Z) {
+    if (isSlice3dMode) {
+      if (this.renderMode !== RenderMode.ORTHO) {
+        this.setVolumeRendering(RenderMode.ORTHO);
+      }
+    } else if (axis === Axis.Z) {
       // If currently in 3D raymarch mode, hotswap the 2D slice
-      if (this.renderMode === RenderMode.RAYMARCH || this.renderMode === RenderMode.PATHTRACE) {
+      if (
+        this.renderMode === RenderMode.RAYMARCH ||
+        this.renderMode === RenderMode.PATHTRACE ||
+        this.renderMode === RenderMode.ORTHO
+      ) {
         this.setVolumeRendering(RenderMode.SLICE);
       }
+    } else if (axis === Axis.X || axis === Axis.Y) {
+      if (this.renderMode !== RenderMode.ORTHO) {
+        this.setVolumeRendering(RenderMode.ORTHO);
+      }
     } else {
-      // If in 2D slice mode, switch back to 3D raymarch mode
-      if (this.renderMode === RenderMode.SLICE) {
+      // If in any slice mode, switch back to 3D raymarch mode
+      if (this.renderMode === RenderMode.SLICE || this.renderMode === RenderMode.ORTHO) {
         this.setVolumeRendering(volumeRenderModeHint);
       }
     }
@@ -847,7 +865,11 @@ export default class VolumeDrawable {
     }
 
     // remove old 3d object from scene
-    if (this.renderMode === RenderMode.SLICE || this.renderMode === RenderMode.RAYMARCH) {
+    if (
+      this.renderMode === RenderMode.SLICE ||
+      this.renderMode === RenderMode.SLICE3D ||
+      this.renderMode === RenderMode.RAYMARCH
+    ) {
       this.childObjectsGroup.remove(this.meshVolume.get3dObject());
     }
     this.sceneRoot.remove(this.volumeRendering.get3dObject());
@@ -867,6 +889,10 @@ export default class VolumeDrawable {
         this.volumeRendering = new Atlas2DSlice(this.volume, this.settings);
         // `updateRequiredData` called on construction, via `updateSettings`
         break;
+      case RenderMode.ORTHO:
+        this.volumeRendering = new Ortho(this.volume, this.settings);
+        // `updateRequiredData` called by crop/loading state
+        break;
       case RenderMode.RAYMARCH:
       default:
         this.volumeRendering = new RayMarchedAtlasVolume(this.volume, this.settings);
@@ -877,7 +903,7 @@ export default class VolumeDrawable {
       this.pickRendering = new PickVolume(this.volume, this.settings);
     }
 
-    if (newRenderMode === RenderMode.RAYMARCH || newRenderMode === RenderMode.SLICE) {
+    if (newRenderMode === RenderMode.RAYMARCH || newRenderMode === RenderMode.SLICE || newRenderMode === RenderMode.ORTHO) {
       if (this.renderUpdateListener) {
         this.renderUpdateListener(0);
       }
@@ -970,15 +996,40 @@ export default class VolumeDrawable {
       .on("change", ({ value }) => this.setRayStepSizes(undefined, value));
   }
 
-  setZSlice(slice: number): boolean {
-    const sizez = this.volume.imageInfo.volumeSize.z;
-    if (this.settings.zSlice !== slice && slice < sizez && slice >= 0) {
-      this.settings.zSlice = slice;
-      this.volumeRendering.updateSettings(this.settings, SettingsFlags.ROI);
-      this.pickRendering?.updateSettings(this.settings, SettingsFlags.ROI);
-      return true;
+  setSliceAxis(axis: Axis, slice: number): boolean {
+    if (axis === Axis.NONE) {
+      return false;
     }
-    return false;
+    const axisKey = axis as "x" | "y" | "z";
+    const axisSize = Math.floor(this.volume.imageInfo.volumeSize[axisKey]);
+    if (!Number.isFinite(slice) || slice < 0 || slice >= axisSize) {
+      return false;
+    }
+
+    const nextSlice = Math.floor(slice);
+    let updated = false;
+    if (axis === Axis.X && this.settings.xSlice !== nextSlice) {
+      this.settings.xSlice = nextSlice;
+      updated = true;
+    } else if (axis === Axis.Y && this.settings.ySlice !== nextSlice) {
+      this.settings.ySlice = nextSlice;
+      updated = true;
+    } else if (axis === Axis.Z && this.settings.zSlice !== nextSlice) {
+      this.settings.zSlice = nextSlice;
+      updated = true;
+    }
+
+    if (!updated) {
+      return false;
+    }
+
+    this.volumeRendering.updateSettings(this.settings, SettingsFlags.ROI);
+    this.pickRendering?.updateSettings(this.settings, SettingsFlags.ROI);
+    return true;
+  }
+
+  setZSlice(slice: number): boolean {
+    return this.setSliceAxis(Axis.Z, slice);
   }
 
   get showBoundingBox(): boolean {

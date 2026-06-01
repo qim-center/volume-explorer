@@ -13,6 +13,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
   const { state, getView3D, goToZSlice } = options;
 
   let activeSliceAxis: CropAxis | null = null;
+  let isMultiSliceMode = false;
   const sliceIndexByAxis: Record<CropAxis, number> = {
     x: 0,
     y: 0,
@@ -24,6 +25,15 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     y: 0,
     z: 0,
   };
+
+  function setSliceIndexForAxis(axis: CropAxis, sliceIndex: number) {
+    if (axis === "z") {
+      goToZSlice(sliceIndex);
+      return;
+    }
+
+    getView3D().setSliceIndex(state.volume, axis, sliceIndex);
+  }
 
   function getAxisVoxelCount(axis: CropAxis): number {
     const axisValue = state.volume.imageInfo?.volumeSize?.[axis];
@@ -111,7 +121,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
   }
 
   function getEffectiveAxisLoadBounds(axis: CropAxis): { min: number; max: number } {
-    if (activeSliceAxis === axis) {
+    if (isMultiSliceMode || activeSliceAxis === axis) {
       return { min: 0, max: 1 };
     }
     return getStateAxisCropBounds(axis);
@@ -120,6 +130,11 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
   function updateSliceViewCurrentLabel() {
     const currentLabel = document.getElementById("slice-view-current") as HTMLSpanElement | null;
     if (!currentLabel) {
+      return;
+    }
+
+    if (isMultiSliceMode) {
+      currentLabel.textContent = `X:${sliceIndexByAxis.x} Y:${sliceIndexByAxis.y} Z:${sliceIndexByAxis.z}`;
       return;
     }
 
@@ -157,7 +172,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
   }
 
   function updateSliceModeControlStates() {
-    const isSliceMode = activeSliceAxis !== null;
+    const isSliceMode = activeSliceAxis !== null || isMultiSliceMode;
 
     for (const axis of CROP_AXES) {
       setCropAxisControlsDisabled(axis, activeSliceAxis === axis);
@@ -179,17 +194,53 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
 
   function updateSliceSelectorUI() {
     const panel = document.getElementById("slice-selector-panel") as HTMLElement | null;
+    const panel3d = document.getElementById("slice-selector-3d-panel") as HTMLElement | null;
     const axisLabel = document.getElementById("slice-selector-axis") as HTMLLabelElement | null;
     const minLabel = document.getElementById("slice-selector-min") as HTMLSpanElement | null;
     const maxLabel = document.getElementById("slice-selector-max") as HTMLSpanElement | null;
     const slider = document.getElementById("slice-selector-slider") as HTMLInputElement | null;
 
-    if (!panel || !axisLabel || !minLabel || !maxLabel || !slider) {
+    const canShowSingle = !!panel && !!axisLabel && !!minLabel && !!maxLabel && !!slider;
+
+    if (isMultiSliceMode) {
+      panel?.classList.add("hidden");
+      if (panel3d) {
+        panel3d.classList.remove("hidden");
+      }
+
+      for (const axis of CROP_AXES) {
+        const sliderEl = document.getElementById(`slice-selector-${axis}-slider`) as HTMLInputElement | null;
+        const minEl = document.getElementById(`slice-selector-${axis}-min`) as HTMLSpanElement | null;
+        const maxEl = document.getElementById(`slice-selector-${axis}-max`) as HTMLSpanElement | null;
+        if (!sliderEl || !minEl || !maxEl) {
+          continue;
+        }
+
+        const maxIndex = getAxisMaxSliceIndex(axis);
+        const nextValue = clampSliceIndex(axis, sliceIndexByAxis[axis]);
+        sliceIndexByAxis[axis] = nextValue;
+
+        minEl.textContent = "0";
+        maxEl.textContent = `${maxIndex}`;
+        sliderEl.min = "0";
+        sliderEl.max = `${maxIndex}`;
+        sliderEl.value = `${nextValue}`;
+      }
+
+      updateSliceViewCurrentLabel();
+      updateSliceModeControlStates();
+      for (const axis of CROP_AXES) {
+        setSliceIndexForAxis(axis, sliceIndexByAxis[axis]);
+      }
       return;
     }
 
-    if (!activeSliceAxis) {
-      panel.classList.add("hidden");
+    if (panel3d) {
+      panel3d.classList.add("hidden");
+    }
+
+    if (!activeSliceAxis || !canShowSingle) {
+      panel?.classList.add("hidden");
       updateSliceViewCurrentLabel();
       updateSliceModeControlStates();
       return;
@@ -214,7 +265,8 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
   }
 
   function setActiveSliceMode(mode: CameraMode) {
-    activeSliceAxis = mode === "3D" ? null : (mode.toLowerCase() as CropAxis);
+    isMultiSliceMode = mode === "ORTHO";
+    activeSliceAxis = mode === "3D" || isMultiSliceMode ? null : (mode.toLowerCase() as CropAxis);
     updateSliceSelectorUI();
     applyCropRegionFromState();
   }
@@ -236,6 +288,21 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
       updateSliceSelectorUI();
       applyCropRegionFromState();
     });
+
+    for (const axis of CROP_AXES) {
+      const axisSlider = document.getElementById(`slice-selector-${axis}-slider`) as HTMLInputElement | null;
+      axisSlider?.addEventListener("input", () => {
+        if (!isMultiSliceMode) {
+          return;
+        }
+
+        const nextSliceIndex = clampSliceIndex(axis, axisSlider.valueAsNumber);
+        sliceIndexByAxis[axis] = nextSliceIndex;
+
+        updateSliceSelectorUI();
+        applyCropRegionFromState();
+      });
+    }
 
     updateSliceSelectorUI();
   }

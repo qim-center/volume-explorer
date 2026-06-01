@@ -118,7 +118,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const x0 = (minB / bins.length) * w;
     const x1 = (maxB / bins.length) * w;
 
-    if (!isSliceMode()) {
+    if (!isHistogramDisabled()) {
       if (x1 > x0) {
         const rampGradient = ctx.createLinearGradient(x0, 0, x1, 0);
         rampGradient.addColorStop(0, "rgba(255,255,255,0.0)");
@@ -228,6 +228,11 @@ export function createHistogramController(options: HistogramControllerOptions) {
     }
   };
 
+  const isHistogramDisabled = (): boolean => {
+    const view3d = getView3D();
+    return view3d.isHistogramDisabled?.() ?? false;
+  };
+
   const applyHistogramLutFromBins = (channelIndex: number): void => {
     const volume = getVolume();
     if (!volume) {
@@ -244,10 +249,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const lutMax = Math.round(max * scale);
 
     const view3d = getView3D();
-    const viewMode = view3d.getViewMode?.();
-    const lut = viewMode !== undefined && viewMode !== ""
-      ? new Lut().createNoTransparency()
-      : new Lut().createFromMinMax(lutMin, lutMax);
+    const lut = isHistogramDisabled() ? new Lut().createNoTransparency() : new Lut().createFromMinMax(lutMin, lutMax);
     volume.setLut(channelIndex, lut);
     onLutUpdated?.(volume, channelIndex);
     view3d.updateLuts(volume);
@@ -299,12 +301,6 @@ export function createHistogramController(options: HistogramControllerOptions) {
     histogramHandleAnimationFrame = window.requestAnimationFrame(animateHistogramHandleHover);
   };
 
-  const isSliceMode = (): boolean => {
-    const view3d = getView3D();
-    const viewMode = view3d.getViewMode?.();
-    return viewMode !== undefined && viewMode !== "";
-  };
-
   const setupInteractions = (): void => {
     if (!canvas) {
       return;
@@ -312,7 +308,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
 
     canvas.addEventListener("mousedown", (event) => {
       const volume = getVolume();
-      if (!volume || isSliceMode()) {
+      if (!volume || isHistogramDisabled()) {
         return;
       }
 
@@ -349,7 +345,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
         return;
       }
 
-      if (selection.dragging && !isSliceMode()) {
+      if (selection.dragging && !isHistogramDisabled()) {
         const b = histogramBinFromX(x, canvas, bins.length);
 
         if (selection.dragging === "min") {
@@ -364,7 +360,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
         return;
       }
 
-      if (isSliceMode()) {
+      if (isHistogramDisabled()) {
         selection.dragging = null;
         selection.hover = null;
         canvas.style.cursor = "default";

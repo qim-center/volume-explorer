@@ -57,6 +57,7 @@ export class View3d {
   private pixelSamplingRate: number;
   private exposure: number;
   private volumeRenderMode: RenderMode.PATHTRACE | RenderMode.RAYMARCH;
+  private slice3dView: boolean;
   private renderUpdateListener?: (iteration: number) => void;
   private loadStartHandler?: (volume: Volume) => void;
   private loadErrorHandler?: (volume: Volume, error: unknown) => void;
@@ -89,6 +90,7 @@ export class View3d {
     this.pixelSamplingRate = 0.75;
     this.exposure = 0.5;
     this.volumeRenderMode = RenderMode.RAYMARCH;
+    this.slice3dView = false;
 
     window.addEventListener("resize", () => this.resize(null));
 
@@ -523,13 +525,22 @@ export class View3d {
 
   // TODO: Change mode to an enum
   /**
-   * Change the camera projection to look along an axis, or to view in a 3d perspective camera.
-   * @param {string} mode Mode can be "3D", or "XY" or "Z", or "YZ" or "X", or "XZ" or "Y".  3D is a perspective view, and all the others are orthographic projections
+   * Change the camera projection to look along an axis, or to view in a 3D perspective camera.
+   * @param {string} mode Mode can be "3D", "ORTHO", or "XY" or "Z", or "YZ" or "X", or "XZ" or "Y".
+   * 3D and ORTHO use the perspective view; axis-aligned modes use orthographic projections.
    */
   setCameraMode(mode: string): void {
-    this.canvas3d.switchViewMode(mode);
-    this.image?.setViewMode(mode, this.volumeRenderMode);
-    this.image?.setIsOrtho(mode !== "3D");
+    const isSlice3dMode = mode === "ORTHO";
+    this.slice3dView = isSlice3dMode;
+    if (isSlice3dMode) {
+      this.canvas3d.switchViewMode("3D");
+      this.image?.setViewMode("ORTHO", this.volumeRenderMode);
+      this.image?.setIsOrtho(false);
+    } else {
+      this.canvas3d.switchViewMode(mode);
+      this.image?.setViewMode(mode, this.volumeRenderMode);
+      this.image?.setIsOrtho(mode !== "3D");
+    }
     this.canvas3d.redraw();
   }
 
@@ -537,8 +548,24 @@ export class View3d {
     return this.image?.getViewMode();
   }
 
+  isHistogramDisabled(): boolean {
+    return this.slice3dView || (this.image?.getViewMode() ?? Axis.NONE) !== Axis.NONE;
+  }
+
   setZSlice(volume: Volume, slice: number): boolean {
-    if (this.image?.setZSlice(slice)) {
+    return this.setSliceIndex(volume, "z", slice);
+  }
+
+  setSliceIndex(volume: Volume, axis: "x" | "y" | "z", slice: number): boolean {
+    if (axis === "z") {
+      if (this.image?.setZSlice(slice)) {
+        this.canvas3d.redraw();
+        return true;
+      }
+      return false;
+    }
+
+    if (this.image?.setSliceAxis(axis as Axis, slice)) {
       this.canvas3d.redraw();
       return true;
     }
@@ -905,7 +932,7 @@ export class View3d {
     this.volumeRenderMode = mode;
     if (this.image) {
       const viewMode = this.image.getViewMode();
-      if (viewMode === Axis.Z) {
+      if (viewMode === Axis.Z || this.slice3dView) {
         // if the camera view is in single-slice view, then we don't want to change
         // anything but still remember the mode for when we switch back to a volumetric view
         return;

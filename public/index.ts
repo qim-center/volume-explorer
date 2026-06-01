@@ -843,12 +843,11 @@ function main() {
 
   if (turntableParam === "true") {
     const appLayout = document.querySelector(".flex-layout");
-    view3D.setAutoRotate(true);
     appLayout?.addEventListener("mouseenter", () => {
-      view3D.setAutoRotate(false);
+      view3D.setAutoRotate(true);
     });
     appLayout?.addEventListener("mouseleave", () => {
-      view3D.setAutoRotate(true);
+      view3D.setAutoRotate(false);
     });
   }
 
@@ -1098,7 +1097,7 @@ function main() {
   });
   histogramController.setupInteractions();
 
-  ["X", "Y", "Z", "3D"].forEach((mode) => {
+  ["X", "Y", "Z", "ORTHO", "3D"].forEach((mode) => {
     document.getElementById(mode)?.addEventListener("click", () => {
       histogramController?.applyHistogramLutFromBins(0);
     });
