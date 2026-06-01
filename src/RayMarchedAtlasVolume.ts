@@ -13,6 +13,8 @@ import {
   Material,
   Matrix4,
   Mesh,
+  LinearFilter,
+  NearestFilter,
   OrthographicCamera,
   PerspectiveCamera,
   ShaderMaterial,
@@ -112,6 +114,8 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
       this.channelData?.cleanup();
       this.channelData = new FusedChannelData(atlasSize.x, atlasSize.y);
     }
+
+    this.applySamplingFiltering();
   }
 
   public viewpointMoved(): void {
@@ -193,7 +197,8 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {
-      this.setUniform("interpolationEnabled", this.settings.useInterpolation);
+      this.setUniform("interpolationEnabled", !this.settings.isOrtho && this.settings.useInterpolation);
+      this.applySamplingFiltering();
       this.setUniform("iResolution", this.settings.resolution);
     }
 
@@ -326,6 +331,7 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     this.setUniform("CLIP_FAR", camera.far);
 
     this.channelData.gpuFuse(renderer);
+    this.applySamplingFiltering();
     this.setUniform("textureAtlas", this.channelData.getFusedTexture());
 
     this.geometryTransformNode.updateMatrixWorld(true);
@@ -353,6 +359,26 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
       return;
     }
     this.uniforms[name].value = value;
+  }
+
+  private applySamplingFiltering(): void {
+    if (!this.channelData) {
+      return;
+    }
+
+    const filter = !this.settings.isOrtho && this.settings.useInterpolation ? LinearFilter : NearestFilter;
+    const fusedTexture = this.channelData.getFusedTexture();
+    if (fusedTexture.minFilter !== filter || fusedTexture.magFilter !== filter) {
+      fusedTexture.minFilter = filter;
+      fusedTexture.magFilter = filter;
+      fusedTexture.needsUpdate = true;
+    }
+
+    if (this.channelData.maskTexture.minFilter !== filter || this.channelData.maskTexture.magFilter !== filter) {
+      this.channelData.maskTexture.minFilter = filter;
+      this.channelData.maskTexture.magFilter = filter;
+      this.channelData.maskTexture.needsUpdate = true;
+    }
   }
 
   // channelcolors is array of {rgbColor, lut} and channeldata is volume.channels

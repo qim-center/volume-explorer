@@ -16,6 +16,8 @@ uniform vec3 AABB_CLIP_MAX;
 uniform sampler2D textureAtlas;
 uniform sampler2D textureAtlasMask;
 uniform int Z_SLICE;
+uniform int sliceAxis;
+uniform float sliceCoord;
 uniform float SLICES;
 uniform bool interpolationEnabled;
 uniform vec3 flipVolume;
@@ -77,15 +79,28 @@ void main() {
   vec2 normUv = vUv - vec2(0.5);
 
   // Return background color if outside of clipping box
-  if(normUv.x < boxMin.x || normUv.x > boxMax.x || normUv.y < boxMin.y || normUv.y > boxMax.y) {
+  bool outside = false;
+  if (sliceAxis == 0) {
+    outside = normUv.x < boxMin.y || normUv.x > boxMax.y || normUv.y < boxMin.z || normUv.y > boxMax.z;
+  } else if (sliceAxis == 1) {
+    outside = normUv.x < boxMin.x || normUv.x > boxMax.x || normUv.y < boxMin.z || normUv.y > boxMax.z;
+  } else {
+    outside = normUv.x < boxMin.x || normUv.x > boxMax.x || normUv.y < boxMin.y || normUv.y > boxMax.y;
+  }
+
+  if(outside) {
     gl_FragColor = vec4(0.0);
     return;
   }
 
-  // Normalize z-slice by total slices
-  vec4 pos = vec4(vUv, 
-    (SLICES==1.0 && Z_SLICE==0) ? 0.0 : float(Z_SLICE) / (SLICES - 1.0), 
-    0.0);
+  vec4 pos;
+  if (sliceAxis == 0) {
+    pos = vec4(sliceCoord, vUv.x, vUv.y, 0.0);
+  } else if (sliceAxis == 1) {
+    pos = vec4(vUv.x, sliceCoord, vUv.y, 0.0);
+  } else {
+    pos = vec4(vUv, sliceCoord, 0.0);
+  }
 
   vec4 C;
   C = sampleAtlas(textureAtlas, pos);

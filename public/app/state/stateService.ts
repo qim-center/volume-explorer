@@ -2,7 +2,7 @@ import { AREA_LIGHT, JsonImageInfoLoader, Light, SKY_LIGHT, Volume, VolumeFileFo
 import { State, TestDataSpec } from "../../types";
 
 export type CropAxis = "x" | "y" | "z";
-export type CameraMode = "X" | "Y" | "Z" | "3D";
+export type CameraMode = "X" | "Y" | "Z" | "3D" | "ORTHO";
 export type CropStateKey = "cropXmin" | "cropXmax" | "cropYmin" | "cropYmax" | "cropZmin" | "cropZmax";
 
 export interface HistogramSelection {

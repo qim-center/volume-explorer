@@ -49,6 +49,7 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
   constructor(volume: Volume, settings: VolumeRenderSettings = new VolumeRenderSettings(volume)) {
     this.volume = volume;
     this.uniforms = sliceShaderUniforms();
+    this.setUniform("sliceAxis", 2);
     [this.geometry, this.geometryMesh] = this.createGeometry(this.uniforms);
 
     this.boxHelper = new Box3Helper(
@@ -87,6 +88,10 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
       this.sliceUpdateWaiting = true;
     } else {
       this.setUniform("Z_SLICE", slice);
+      const slices = Math.max(1, this.volume.imageInfo.subregionSize.z);
+      const denom = Math.max(1, slices - 1);
+      const coord = slices <= 1 ? 0.5 : slice / denom;
+      this.setUniform("sliceCoord", coord);
       this.sliceUpdateWaiting = false;
     }
 

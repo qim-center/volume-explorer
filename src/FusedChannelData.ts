@@ -31,6 +31,11 @@ import type { FuseChannel, NumberType } from "./types.js";
 
 // This is the owner of the fused RGBA volume texture atlas, and the mask texture atlas.
 // This module is responsible for updating the fused texture, given the read-only volume channel data.
+type FuseMeshEntry = {
+  mesh: Mesh<PlaneGeometry, ShaderMaterial>;
+  shaderKey: string;
+};
+
 export default class FusedChannelData {
   public width: number;
   public height: number;
@@ -50,6 +55,7 @@ export default class FusedChannelData {
   private fuseScene: Scene;
   private quadCamera: OrthographicCamera;
   private fuseRenderTarget: WebGLRenderTarget;
+  private fuseMeshes = new Map<number, FuseMeshEntry>();
 
   constructor(atlasX: number, atlasY: number) {
     // allow for resizing
@@ -172,6 +178,16 @@ export default class FusedChannelData {
   public cleanup(): void {
     this.fuseScene.clear();
     this.maskTexture.dispose();
+    this.fuseRenderTarget.dispose();
+    this.fuseGeometry.dispose();
+    this.fuseMaterialF.dispose();
+    this.fuseMaterialUI.dispose();
+    this.fuseMaterialI.dispose();
+    this.fuseMaterialColorizeUI.dispose();
+    for (const entry of this.fuseMeshes.values()) {
+      entry.mesh.material.dispose();
+    }
+    this.fuseMeshes.clear();
   }
 
   private getShader(dtype: NumberType, isColorize: boolean): ShaderMaterial {
@@ -209,6 +225,7 @@ export default class FusedChannelData {
     if (!canFuse) {
       this.channelsDataToFuse = [];
       this.fuseRequested = [];
+      this.fuseScene.clear();
       return;
     }
 
@@ -223,16 +240,9 @@ export default class FusedChannelData {
       return;
     }
 
-    // webgl draw one mesh per channel to fuse.  clear texture to 0,0,0,0
-
-    this.fuseScene.traverse((node) => {
-      if (node instanceof Mesh) {
-        // materials were holding references to the channel data textures
-        // causing mem leak so we must dispose before clearing the scene
-        node.material.dispose();
-      }
-    });
+    // webgl draw one mesh per channel to fuse. clear texture to 0,0,0,0.
     this.fuseScene.clear();
+    const activeMeshes: Mesh<PlaneGeometry, ShaderMaterial>[] = [];
     for (let i = 0; i < combination.length; ++i) {
       if (combination[i].rgbColor) {
         const chIndex = combination[i].chIndex;
@@ -240,9 +250,20 @@ export default class FusedChannelData {
           continue;
         }
         const isColorize = combination[i].feature !== undefined;
-        // add a draw call per channel here.
-        // must clone the material to keep a unique set of uniforms
-        const mat = this.getShader(channels[chIndex].dtype, isColorize).clone();
+        const shaderKey = `${channels[chIndex].dtype}:${isColorize ? 1 : 0}`;
+        let entry = this.fuseMeshes.get(chIndex);
+        if (!entry || entry.shaderKey !== shaderKey) {
+          if (entry) {
+            entry.mesh.material.dispose();
+          }
+          entry = {
+            mesh: new Mesh(this.fuseGeometry, this.getShader(channels[chIndex].dtype, isColorize).clone()),
+            shaderKey,
+          };
+          this.fuseMeshes.set(chIndex, entry);
+        }
+
+        const mat = entry.mesh.material;
         mat.uniforms.srcTexture.value = channels[chIndex].dataTexture;
         mat.uniforms.highlightedId.value = combination[i].selectedID == undefined ? -1 : combination[i].selectedID;
         const feature = combination[i].feature;
@@ -279,8 +300,11 @@ export default class FusedChannelData {
           mat.uniforms.lutMinMax.value = new Vector2(channels[chIndex].rawMin, channels[chIndex].rawMax);
           mat.uniforms.lutSampler.value = channels[chIndex].lutTexture;
         }
-        this.fuseScene.add(new Mesh(this.fuseGeometry, mat));
+        activeMeshes.push(entry.mesh);
       }
+    }
+    for (const mesh of activeMeshes) {
+      this.fuseScene.add(mesh);
     }
     if (this.fuseScene.children.length > 0) {
       renderer.setRenderTarget(this.fuseRenderTarget);

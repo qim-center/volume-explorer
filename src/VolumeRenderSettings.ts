@@ -13,7 +13,7 @@ export enum SettingsFlags {
   CAMERA = 0b000000010,
   /** parameters: showBoundingBox, boundingBoxColor */
   BOUNDING_BOX = 0b000000100,
-  /** parameters: bounds, zSlice */
+  /** parameters: bounds, xSlice, ySlice, zSlice */
   ROI = 0b000001000,
   /** parameters: maskAlpha */
   MASK_ALPHA = 0b000010000,
@@ -74,6 +74,8 @@ export class VolumeRenderSettings {
 
   // ROI
   public bounds: Bounds;
+  public xSlice: number;
+  public ySlice: number;
   public zSlice: number;
 
   // BOUNDING_BOX
@@ -119,12 +121,16 @@ export class VolumeRenderSettings {
     this.maxProjectMode = false;
     // volume-dependent properties
     if (volume) {
+      this.xSlice = Math.floor(volume.imageInfo.volumeSize.x / 2);
+      this.ySlice = Math.floor(volume.imageInfo.volumeSize.y / 2);
       this.zSlice = Math.floor(volume.imageInfo.subregionSize.z / 2);
       this.diffuse = new Array(volume.imageInfo.numChannels).fill([255, 255, 255]);
       this.specular = new Array(volume.imageInfo.numChannels).fill([0, 0, 0]);
       this.emissive = new Array(volume.imageInfo.numChannels).fill([0, 0, 0]);
       this.glossiness = new Array(volume.imageInfo.numChannels).fill(0);
     } else {
+      this.xSlice = 0;
+      this.ySlice = 0;
       this.zSlice = 0;
       this.diffuse = [[255, 255, 255]];
       this.specular = [[0, 0, 0]];
@@ -136,6 +142,8 @@ export class VolumeRenderSettings {
   }
 
   public resizeWithVolume(volume: Volume): void {
+    this.xSlice = Math.floor(volume.imageInfo.volumeSize.x / 2);
+    this.ySlice = Math.floor(volume.imageInfo.volumeSize.y / 2);
     this.zSlice = Math.floor(volume.imageInfo.subregionSize.z / 2);
     this.diffuse = new Array(volume.imageInfo.numChannels).fill([255, 255, 255]);
     this.specular = new Array(volume.imageInfo.numChannels).fill([0, 0, 0]);
