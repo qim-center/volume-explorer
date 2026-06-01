@@ -813,6 +813,30 @@ export default class VolumeDrawable {
     this.pickRendering?.updateSettings(this.settings, SettingsFlags.ROI);
   }
 
+  /**
+   * Computes the world-space center of a visible region specified in 0..1
+   * volume coordinates.
+   */
+  getVisibleRegionWorldCenter(
+    xmin: number,
+    xmax: number,
+    ymin: number,
+    ymax: number,
+    zmin: number,
+    zmax: number
+  ): Vector3 {
+    const center = new Vector3(
+      (xmin + xmax) * 0.5 - 0.5,
+      (ymin + ymax) * 0.5 - 0.5,
+      (zmin + zmax) * 0.5 - 0.5
+    );
+    const worldScale = this.volume.normPhysicalSize.clone().multiply(this.settings.scale);
+    center.multiply(worldScale);
+    center.applyEuler(this.settings.rotation);
+    center.add(this.settings.translation);
+    return center;
+  }
+
   // values are in 0..1 range
   updateLoadedRegion(
     xmin: number,

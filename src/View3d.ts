@@ -130,6 +130,14 @@ export class View3d {
     this.canvas3d.updatePerspectiveScaleBar(volume.tickMarkPhysicalLength, volume.imageInfo.spatialUnit);
   }
 
+  private recenterControlsTarget(center: Vector3): void {
+    const controls = this.canvas3d.controls;
+    const delta = center.clone().sub(controls.target);
+    this.canvas3d.camera.position.add(delta);
+    controls.target.copy(center);
+    controls.update();
+  }
+
   private updateTimestepIndicator(volume: Volume): void {
     const { times, timeScale, timeUnit } = volume.imageInfo;
     const currentTime = volume.loadSpec.time;
@@ -788,6 +796,10 @@ export class View3d {
     zmax: number
   ): void {
     this.image?.updateVisibleRegion(xmin, xmax, ymin, ymax, zmin, zmax);
+    if (this.image) {
+      const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
+      this.recenterControlsTarget(center);
+    }
     this.redraw();
   }
 
@@ -801,6 +813,10 @@ export class View3d {
     zmax: number
   ): Promise<void> {
     const loadPromise = this.image?.updateLoadedRegion(xmin, xmax, ymin, ymax, zmin, zmax);
+    if (this.image) {
+      const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
+      this.recenterControlsTarget(center);
+    }
     this.redraw();
     return loadPromise ?? Promise.resolve();
   }
