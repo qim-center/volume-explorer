@@ -891,7 +891,7 @@ export default class VolumeDrawable {
     // remove old 3d object from scene
     if (
       this.renderMode === RenderMode.SLICE ||
-      this.renderMode === RenderMode.SLICE3D ||
+      this.renderMode === RenderMode.ORTHO ||
       this.renderMode === RenderMode.RAYMARCH
     ) {
       this.childObjectsGroup.remove(this.meshVolume.get3dObject());
