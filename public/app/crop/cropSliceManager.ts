@@ -280,10 +280,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
 
       const nextSliceIndex = clampSliceIndex(activeSliceAxis, slider.valueAsNumber);
       sliceIndexByAxis[activeSliceAxis] = nextSliceIndex;
-
-      if (activeSliceAxis === "z") {
-        goToZSlice(nextSliceIndex);
-      }
+      setSliceIndexForAxis(activeSliceAxis, nextSliceIndex);
 
       updateSliceSelectorUI();
       applyCropRegionFromState();
