@@ -64,17 +64,18 @@
         </div>
         
         <div class="controls-item">
-          <div class="row row-cols-1 row-cols-md-3 g-3">
-            <div class="col">
-              <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap h-100">
-                <details id="colormap-dropdown" class="colormap-dropdown">
-                  <summary id="colormap-dropdown-toggle" class="colormap-dropdown-toggle" aria-label="Choose colormap">
-                    <span id="colormap-dropdown-preview" class="colormap-dropdown-preview" aria-hidden="true"></span>
-                  </summary>
-                  <div id="colormap-picker" class="colormap-picker" role="listbox" aria-label="Colormap picker"></div>
-                </details>
-              </div>
-            </div>
+          <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap mb-3">
+            <details id="colormap-dropdown" class="colormap-dropdown flex-grow-1">
+              <summary id="colormap-dropdown-toggle" class="colormap-dropdown-toggle" aria-label="Choose colormap">
+                <span id="colormap-dropdown-preview" class="colormap-dropdown-preview" aria-hidden="true"></span>
+              </summary>
+              <div id="colormap-picker" class="colormap-picker" role="listbox" aria-label="Colormap picker"></div>
+            </details>
+            <button id="colormap-invert-toggle" type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0" aria-pressed="false" title="Invert colormap">
+              Invert scale
+            </button>
+          </div>
+          <div class="row row-cols-1 row-cols-md-2 g-3">
             <div class="col">
               <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
                 <label for="backgroundColor" class="col-form-label mb-0 text-nowrap">Background</label>

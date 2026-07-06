@@ -1091,6 +1091,7 @@ function main() {
     getColormapName: () => myState.colormap,
     getColormapMin: () => myState.colormapMin,
     getColormapMax: () => myState.colormapMax,
+    getColormapInverted: () => myState.colormapInverted,
     onLutUpdated: (volume, channelIndex) => {
       applyColormapToChannel(volume, channelIndex);
     },
@@ -1114,6 +1115,7 @@ function main() {
   });
   colormapController.setupColorizeControls();
   colormapController.setupColormapRangeControls();
+  colormapController.setupColormapInvertControl();
 
   setupCropControls();
   setupSliceSelectorControls();
