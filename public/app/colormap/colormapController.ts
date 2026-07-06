@@ -8,6 +8,7 @@ interface ColormapControllerState {
   colormap: string;
   colormapMin: number;
   colormapMax: number;
+  colormapInverted: boolean;
   colorizeEnabled: boolean;
   colorizeChannel: number;
   feature: string;
@@ -48,7 +49,13 @@ export function createColormapController(options: ColormapControllerOptions) {
     return [Math.round(r * 255), Math.round(g * 255), Math.round(bcol * 255)];
   };
 
-  const buildColormapPalette = (stops: string[], alphaLut: Uint8Array, minBin?: number, maxBin?: number): Uint8Array => {
+  const buildColormapPalette = (
+    stops: string[],
+    alphaLut: Uint8Array,
+    minBin?: number,
+    maxBin?: number,
+    inverted?: boolean
+  ): Uint8Array => {
     const palette = new Uint8Array(LUT_ARRAY_LENGTH);
     const stopColors = stops.map((stop) => new Color(stop));
     const lo = minBin ?? 0;
@@ -57,7 +64,7 @@ export function createColormapController(options: ColormapControllerOptions) {
 
     for (let i = 0; i < LUT_ENTRIES; i++) {
       const t = (i - lo) / range;
-      const [r, g, b] = sampleColormapStops(stopColors, t);
+      const [r, g, b] = sampleColormapStops(stopColors, inverted ? 1 - t : t);
       const offset = i * 4;
       palette[offset] = r;
       palette[offset + 1] = g;
@@ -90,7 +97,13 @@ export function createColormapController(options: ColormapControllerOptions) {
     }
 
     const range = getColormapRange?.();
-    const palette = buildColormapPalette(colormap.stops, channel.lut.lut, minBin ?? range?.minBin, maxBin ?? range?.maxBin);
+    const palette = buildColormapPalette(
+      colormap.stops,
+      channel.lut.lut,
+      minBin ?? range?.minBin,
+      maxBin ?? range?.maxBin,
+      state.colormapInverted
+    );
     volume.setColorPalette(channelIndex, palette);
     volume.setColorPaletteAlpha(channelIndex, 1);
   };
@@ -149,11 +162,19 @@ export function createColormapController(options: ColormapControllerOptions) {
   const syncSelectedColormapSwatch = (colormapPicker: HTMLElement, colormapPreview: HTMLElement | null): void => {
     const swatches = colormapPicker.querySelectorAll<HTMLButtonElement>(".colormap-swatch");
     for (const swatch of swatches) {
-      swatch.classList.toggle("is-selected", swatch.dataset.colormapName === state.colormap);
+      const name = swatch.dataset.colormapName;
+      swatch.classList.toggle("is-selected", name === state.colormap);
+      const swatchColormap = name ? colorizercolormaps[name] : undefined;
+      if (swatchColormap) {
+        const swatchStops = state.colormapInverted ? [...swatchColormap.stops].reverse() : swatchColormap.stops;
+        swatch.style.background = `linear-gradient(to right, ${swatchStops.join(", ")})`;
+      }
     }
 
     if (colormapPreview && colorizercolormaps[state.colormap]) {
-      colormapPreview.style.background = `linear-gradient(to right, ${colorizercolormaps[state.colormap].stops.join(", ")})`;
+      const stops = colorizercolormaps[state.colormap].stops;
+      const orderedStops = state.colormapInverted ? [...stops].reverse() : stops;
+      colormapPreview.style.background = `linear-gradient(to right, ${orderedStops.join(", ")})`;
       colormapPreview.title = state.colormap;
     }
   };
@@ -175,14 +196,12 @@ export function createColormapController(options: ColormapControllerOptions) {
     }
 
     for (const colormapName of colormapNames) {
-      const colormap = colorizercolormaps[colormapName];
       const swatch = document.createElement("button");
       swatch.type = "button";
       swatch.className = "colormap-swatch";
       swatch.dataset.colormapName = colormapName;
       swatch.setAttribute("aria-label", `Select ${colormapName} colormap`);
       swatch.title = colormapName;
-      swatch.style.background = `linear-gradient(to right, ${colormap.stops.join(", ")})`;
       swatch.addEventListener("click", () => {
         if (state.colormap === colormapName) {
           colormapDropdown?.removeAttribute("open");
@@ -307,6 +326,36 @@ export function createColormapController(options: ColormapControllerOptions) {
     maxInput.addEventListener("input", onMaxInput);
   };
 
+  const setupColormapInvertControl = (): void => {
+    const invertToggle = document.getElementById("colormap-invert-toggle") as HTMLButtonElement | null;
+    if (!invertToggle) {
+      return;
+    }
+
+    const syncInvertButton = () => {
+      invertToggle.classList.toggle("active", state.colormapInverted);
+      invertToggle.setAttribute("aria-pressed", String(state.colormapInverted));
+    };
+    syncInvertButton();
+
+    invertToggle.addEventListener("click", () => {
+      state.colormapInverted = !state.colormapInverted;
+      syncInvertButton();
+
+      const colormapPicker = document.getElementById("colormap-picker") as HTMLElement | null;
+      const colormapPreview = document.getElementById("colormap-dropdown-preview") as HTMLElement | null;
+      if (colormapPicker) {
+        syncSelectedColormapSwatch(colormapPicker, colormapPreview);
+      }
+
+      const volume = getVolume();
+      if (volume) {
+        applyColormapToVolume(volume);
+      }
+      onColormapChange?.();
+    });
+  };
+
   return {
     applyColormapToChannel,
     applyColormapToVolume,
@@ -314,5 +363,6 @@ export function createColormapController(options: ColormapControllerOptions) {
     setColormapInUrl,
     setupColorizeControls,
     setupColormapRangeControls,
+    setupColormapInvertControl,
   };
 }

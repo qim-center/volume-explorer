@@ -122,6 +122,7 @@ export function createInitialState(): State {
     colormap: "viridis",
     colormapMin: 0,
     colormapMax: 255,
+    colormapInverted: false,
     featureMin: 0.0,
     featureMax: 1.0,
   };

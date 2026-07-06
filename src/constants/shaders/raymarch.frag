@@ -170,9 +170,11 @@ bool intersectBox(in vec3 r_o, in vec3 r_d, in vec3 boxMin, in vec3 boxMax,
 }
 
 vec4 accumulate(vec4 col, float s, vec4 C) {
-  float stepScale = (1.0 - powf((1.0-col.w),s));
+  // col.xyz is already multiplied by col.w at this point, so divide by opacity
+  float opacity = col.w;
+  float stepScale = (1.0 - powf((1.0 - opacity), s));
+  col.xyz *= (opacity > 0.0) ? (stepScale / opacity) : 0.0;
   col.w = stepScale;
-  col.xyz *= col.w;
   col = clamp(col,0.0,1.0);
 
   C = (1.0-C.w)*col + C;
@@ -226,6 +228,8 @@ vec4 integrateVolume(vec4 eye_o,vec4 eye_d,
       col.xyz *= BRIGHTNESS;
       // for practical use the density only matters for regular volume integration
       col.w *= DENSITY;
+      // col.xyz is premultiplied by the LUT opacity, so scale it by density so it uses the same density-based opacity as col.w
+      col.xyz *= DENSITY;
       C = accumulate(col, s, C);
     }
     t += tstep;

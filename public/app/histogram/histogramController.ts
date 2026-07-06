@@ -12,6 +12,7 @@ interface HistogramControllerOptions {
   getColormapName?: () => string;
   getColormapMin?: () => number;
   getColormapMax?: () => number;
+  getColormapInverted?: () => boolean;
   onLutUpdated?: (volume: Volume, channelIndex: number) => void;
 }
 
@@ -37,7 +38,8 @@ const sampleColormapStops = (stopColors: Color[], t: number): [number, number, n
 };
 
 export function createHistogramController(options: HistogramControllerOptions) {
-  const { canvas, selection, getVolume, getView3D, getColormapName, getColormapMin, getColormapMax, onLutUpdated } = options;
+  const { canvas, selection, getVolume, getView3D, getColormapName, getColormapMin, getColormapMax, getColormapInverted, onLutUpdated } =
+    options;
   let histogramHandleAnimationFrame: number | null = null;
 
   const drawHistogramFromVolume = (volume: Volume, channelIndex: number): void => {
@@ -93,6 +95,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const cmMin = maxBinIndex ? Math.round(cmMinRaw / 255 * maxBinIndex) : 0;
     const cmMax = maxBinIndex ? Math.round(cmMaxRaw / 255 * maxBinIndex) : 0;
     const cmRange = cmMax - cmMin || 1;
+    const colormapInverted = getColormapInverted?.() ?? false;
     if (colormap && colormap.stops && colormap.stops.length > 0) {
       colormapStopColors = colormap.stops.map((stop: string) => new Color(stop));
     }
@@ -103,7 +106,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
 
       if (colormapStopColors) {
         const t = (i - cmMin) / cmRange;
-        const [r, g, b] = sampleColormapStops(colormapStopColors, t);
+        const [r, g, b] = sampleColormapStops(colormapStopColors, colormapInverted ? 1 - t : t);
         ctx.fillStyle = `rgb(${r},${g},${b})`;
       } else {
         ctx.fillStyle = "#b3b3b3";
