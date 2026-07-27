@@ -1126,6 +1126,41 @@ export class View3d {
     return this.canvas3d.hitTest(offsetX, offsetY, this.image.getPickBuffer());
   }
 
+  /**
+   * Get the voxel coordinates and intensity value of the pixel under a screen coordinate, for use
+   * in 2D slice views (X, Y, or Z). Returns `null` when not in a single-axis slice view or when
+   * the coordinate falls outside the volume.
+   * @param offsetX mouse x coordinate, in CSS pixels relative to the canvas
+   * @param offsetY mouse y coordinate, in CSS pixels relative to the canvas
+   * @param channelIndex channel to read the intensity value from (default 0)
+   * @returns `{ x, y, z, value }` in full-volume voxel coordinates, or `null`
+   */
+  getSlicePixelInfo(
+    offsetX: number,
+    offsetY: number,
+    channelIndex = 0
+  ): { x: number; y: number; z: number; value: number } | null {
+    if (!this.image) {
+      return null;
+    }
+    const camera = this.canvas3d.camera;
+    if (!isOrthographicCamera(camera)) {
+      return null;
+    }
+    const canvas = this.canvas3d.renderer.domElement;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!width || !height) {
+      return null;
+    }
+    // Convert to normalized device coordinates and unproject into world space. For an orthographic
+    // camera the depth component is irrelevant to the resulting x/y, so any value works.
+    const ndcX = (offsetX / width) * 2 - 1;
+    const ndcY = -(offsetY / height) * 2 + 1;
+    const worldPoint = new Vector3(ndcX, ndcY, 0).unproject(camera);
+    return this.image.getSlicePixelInfo(worldPoint, channelIndex);
+  }
+
   private setupGui(container: HTMLElement): Pane {
     const pane = new Pane({ title: "Advanced Settings", container });
     const paneStyle: Partial<CSSStyleDeclaration> = {
