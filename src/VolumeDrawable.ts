@@ -781,6 +781,62 @@ export default class VolumeDrawable {
     return this.volume.getIntensity(c, x, y, z);
   }
 
+  /**
+   * Given a world-space point (e.g. from unprojecting a screen coordinate), return the voxel
+   * coordinates and intensity value under that point in the current 2D slice view.
+   *
+   * Only valid when viewing a single axis-aligned slice (X, Y, or Z). Returns `null` if the
+   * drawable is not in a single-axis slice view or if the point falls outside the volume.
+   *
+   * Coordinates are reported in full-volume voxel space; the intensity is read from the loaded
+   * subregion of the given channel.
+   */
+  getSlicePixelInfo(
+    worldPoint: Vector3,
+    channelIndex: number
+  ): { x: number; y: number; z: number; value: number } | null {
+    const axis = this.viewMode;
+    if (axis !== Axis.X && axis !== Axis.Y && axis !== Axis.Z) {
+      return null;
+    }
+
+    const { normPhysicalSize, normRegionSize } = this.volume;
+    const { subregionSize, subregionOffset } = this.volume.imageInfo;
+
+    // World-space box occupied by the loaded subregion (see `updateScale`).
+    const extent = normPhysicalSize.clone().multiply(normRegionSize).multiply(this.settings.scale);
+    const center = this.volume.getContentCenter().multiply(this.settings.scale);
+
+    // Normalized [0, 1] position within the subregion box.
+    const u = worldPoint.clone().sub(center).divide(extent).addScalar(0.5);
+
+    // In-plane voxel indices (subregion-local).
+    let x = Math.floor(u.x * subregionSize.x);
+    let y = Math.floor(u.y * subregionSize.y);
+    let z = Math.floor(u.z * subregionSize.z);
+
+    // For the axis we're looking down, the world point's depth is meaningless; use the current
+    // slice instead. Slice indices are stored in full-volume coordinates, so shift to subregion-local.
+    if (axis === Axis.X) {
+      x = this.settings.xSlice - subregionOffset.x;
+    } else if (axis === Axis.Y) {
+      y = this.settings.ySlice - subregionOffset.y;
+    } else {
+      z = this.settings.zSlice - subregionOffset.z;
+    }
+
+    if (x < 0 || y < 0 || z < 0 || x >= subregionSize.x || y >= subregionSize.y || z >= subregionSize.z) {
+      return null;
+    }
+
+    return {
+      x: x + subregionOffset.x,
+      y: y + subregionOffset.y,
+      z: z + subregionOffset.z,
+      value: this.volume.getIntensity(channelIndex, x, y, z),
+    };
+  }
+
   onStartControls(): void {
     if (this.renderMode === RenderMode.PATHTRACE) {
       (this.volumeRendering as PathTracedVolume).onStartControls();

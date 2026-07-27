@@ -1038,6 +1038,36 @@ function main() {
     });
   }
 
+  // Small readout in the bottom-right of the viewer showing the voxel coordinates and intensity
+  // value under the cursor, while hovering a 2D slice view (X, Y, or Z).
+  const pixelInfoBox = document.createElement("div");
+  Object.assign(pixelInfoBox.style, {
+    fontFamily: "monospace",
+    position: "absolute",
+    left: "50%",
+    transform: "translateX(-50%)",
+    bottom: "20px",
+    width: "240px",
+    boxSizing: "border-box",
+    padding: "6px 8px",
+    background: "rgba(0, 0, 0, 0.6)",
+    color: "white",
+    fontSize: "12px",
+    lineHeight: "1.4",
+    borderRadius: "4px",
+    pointerEvents: "none",
+    whiteSpace: "pre",
+    textAlign: "center",
+    display: "none",
+    zIndex: "10",
+  } as Partial<CSSStyleDeclaration>);
+  view3D.getDOMElement().appendChild(pixelInfoBox);
+
+  const getHoverChannel = (): number => {
+    const enabled = myState.channelGui?.findIndex((ch) => ch.enabled);
+    return enabled !== undefined && enabled >= 0 ? enabled : 0;
+  };
+
   el.addEventListener("mousemove", (e: Event) => {
     const event = e as MouseEvent;
     const intersectedObject = view3D.hitTest(event.offsetX, event.offsetY);
@@ -1049,6 +1079,26 @@ function main() {
       el.style.cursor = "default";
       view3D.setSelectedID(myState.volume, myState.colorizeChannel, -1);
     }
+
+    const channel = getHoverChannel();
+    const pixelInfo = view3D.getSlicePixelInfo(event.offsetX, event.offsetY, channel);
+    if (pixelInfo) {
+      const value = Number.isFinite(pixelInfo.value)
+        ? Number.isInteger(pixelInfo.value)
+          ? pixelInfo.value
+          : pixelInfo.value.toFixed(10)
+        : "-";
+      const channelName = myState.volume?.channelNames?.[channel] ?? `Channel ${channel}`;
+      pixelInfoBox.textContent =
+        `x: ${pixelInfo.x}  y: ${pixelInfo.y}  z: ${pixelInfo.z}\n` + `${channelName}: ${value}`;
+      pixelInfoBox.style.display = "";
+    } else {
+      pixelInfoBox.style.display = "none";
+    }
+  });
+
+  el.addEventListener("mouseleave", () => {
+    pixelInfoBox.style.display = "none";
   });
 
   bindPrimaryViewControls({
