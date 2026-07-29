@@ -87,7 +87,8 @@ body {
 
 .colormap-dropdown {
   position: relative;
-  width: min(100%, 8rem);
+  width: 100%;
+  max-width: 12rem;
 }
 
 .colormap-dropdown-toggle {
