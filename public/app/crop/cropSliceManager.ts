@@ -7,10 +7,11 @@ interface CropSliceManagerOptions {
   state: State;
   getView3D: () => View3d;
   goToZSlice: (slice: number) => boolean;
+  onCropRegionApplied?: () => void;
 }
 
 export function createCropSliceManager(options: CropSliceManagerOptions) {
-  const { state, getView3D, goToZSlice } = options;
+  const { state, getView3D, goToZSlice, onCropRegionApplied } = options;
 
   let activeSliceAxis: CropAxis | null = null;
   let isMultiSliceMode = false;
@@ -351,6 +352,8 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
         zDisplayBounds.max
       );
     }
+
+    onCropRegionApplied?.();
   }
 
   function syncCropFill(axis: CropAxis) {
