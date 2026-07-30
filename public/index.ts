@@ -77,10 +77,28 @@ const cropSliceManager = createCropSliceManager({
   state: myState,
   getView3D: () => view3D,
   goToZSlice,
+  onCropRegionApplied: () => syncCropHandlesFromState(),
 });
 
 function applyCropRegionFromState() {
   cropSliceManager.applyCropRegionFromState();
+}
+
+function getCropRegionFromState() {
+  return {
+    xmin: myState.cropXmin,
+    xmax: myState.cropXmax,
+    ymin: myState.cropYmin,
+    ymax: myState.cropYmax,
+    zmin: myState.cropZmin,
+    zmax: myState.cropZmax,
+  };
+}
+
+function syncCropHandlesFromState() {
+  if (view3D) {
+    view3D.setCropHandlesRegion(getCropRegionFromState());
+  }
 }
 
 function getEffectiveAxisLoadBounds(axis: "x" | "y" | "z") {
@@ -95,8 +113,24 @@ function resetSliceIndicesForVolume(volume: Volume) {
   cropSliceManager.resetSliceIndicesForVolume(volume);
 }
 
+let cropHandlesToggleOn = false;
+let currentCameraMode: CameraMode = "3D";
+
+function updateCropHandlesEnabled() {
+  if (!view3D) {
+    return;
+  }
+  const enabled = cropHandlesToggleOn && currentCameraMode === "3D";
+  view3D.setCropHandlesEnabled(enabled);
+  if (enabled) {
+    syncCropHandlesFromState();
+  }
+}
+
 function setActiveSliceMode(mode: CameraMode) {
   cropSliceManager.setActiveSliceMode(mode);
+  currentCameraMode = mode;
+  updateCropHandlesEnabled();
 }
 
 function setupCropControls() {
@@ -840,6 +874,40 @@ function main() {
   });
   view3D.setBackgroundColor(myState.backgroundColor);
   syncColorInputsToState();
+
+  view3D.setCropHandlesChangeHandler((region, committed) => {
+    myState.cropXmin = region.xmin;
+    myState.cropXmax = region.xmax;
+    myState.cropYmin = region.ymin;
+    myState.cropYmax = region.ymax;
+    myState.cropZmin = region.zmin;
+    myState.cropZmax = region.zmax;
+    syncCropInputsFromState();
+
+    if (committed) {
+      applyCropRegionFromState();
+    } else {
+      view3D.updateVisibleRegion(
+        myState.volume,
+        region.xmin,
+        region.xmax,
+        region.ymin,
+        region.ymax,
+        region.zmin,
+        region.zmax,
+        false
+      );
+    }
+  });
+
+  const cropHandlesToggle = document.getElementById("cropHandlesToggle") as HTMLInputElement | null;
+  if (cropHandlesToggle) {
+    cropHandlesToggle.checked = cropHandlesToggleOn;
+    cropHandlesToggle.addEventListener("change", () => {
+      cropHandlesToggleOn = cropHandlesToggle.checked;
+      updateCropHandlesEnabled();
+    });
+  }
 
   if (turntableParam === "true") {
     const appLayout = document.querySelector(".flex-layout");

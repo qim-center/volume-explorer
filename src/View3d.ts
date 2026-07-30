@@ -15,6 +15,7 @@ import { Pane } from "tweakpane";
 
 import { CameraState, MESH_LAYER, ThreeJsPanel } from "./ThreeJsPanel.js";
 import lightSettings from "./constants/lights.js";
+import CropHandles, { CropHandlesChangeHandler, CropRegion } from "./CropHandles.js";
 import VolumeDrawable from "./VolumeDrawable.js";
 import { Light, AREA_LIGHT, SKY_LIGHT } from "./Light.js";
 import Volume from "./Volume.js";
@@ -62,6 +63,7 @@ export class View3d {
   private loadStartHandler?: (volume: Volume) => void;
   private loadErrorHandler?: (volume: Volume, error: unknown) => void;
   private image?: VolumeDrawable;
+  private cropHandles?: CropHandles;
 
   private lights: Light[];
   private lightContainer: Object3D;
@@ -151,7 +153,12 @@ export class View3d {
    * @param {Object} dataurlcallback function to call when data url is ready; function accepts dataurl as string arg
    */
   capture(dataurlcallback: (name: string) => void): void {
-    return this.canvas3d.requestCapture(dataurlcallback);
+    const handles = this.cropHandles;
+    handles?.setHiddenForCapture(true);
+    return this.canvas3d.requestCapture((url) => {
+      handles?.setHiddenForCapture(false);
+      dataurlcallback(url);
+    });
   }
 
   getDOMElement(): HTMLDivElement {
@@ -812,6 +819,7 @@ export class View3d {
    * @param {number} ymax 0..1, should be greater than ymin
    * @param {number} zmin 0..1, should be less than zmax
    * @param {number} zmax 0..1, should be greater than zmin
+   * @param {boolean} [recenter=true]
    */
   updateVisibleRegion(
     volume: Volume,
@@ -820,10 +828,11 @@ export class View3d {
     ymin: number,
     ymax: number,
     zmin: number,
-    zmax: number
+    zmax: number,
+    recenter = true
   ): void {
     this.image?.updateVisibleRegion(xmin, xmax, ymin, ymax, zmin, zmax);
-    if (this.image) {
+    if (this.image && recenter) {
       const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
       this.recenterControlsTarget(center);
     }
@@ -1124,6 +1133,37 @@ export class View3d {
       return -1;
     }
     return this.canvas3d.hitTest(offsetX, offsetY, this.image.getPickBuffer());
+  }
+
+  private ensureCropHandles(): CropHandles {
+    if (!this.cropHandles) {
+      this.cropHandles = new CropHandles({
+        scene: this.scene,
+        getCamera: () => this.canvas3d.camera,
+        getCanvas: () => this.canvas3d.renderer.domElement,
+        getControls: () => this.canvas3d.controls,
+        getVolumeExtent: () => this.image?.volume.normPhysicalSize.clone() ?? null,
+        redraw: this.redraw,
+        onInteractionStart: () => this.onStartControls(),
+        onInteractionEnd: () => this.onEndControls(),
+      });
+    }
+    return this.cropHandles;
+  }
+
+  setCropHandlesEnabled(enabled: boolean): void {
+    if (!enabled && !this.cropHandles) {
+      return;
+    }
+    this.ensureCropHandles().setEnabled(enabled);
+  }
+
+  setCropHandlesRegion(region: CropRegion): void {
+    this.ensureCropHandles().setRegion(region);
+  }
+
+  setCropHandlesChangeHandler(handler: CropHandlesChangeHandler | undefined): void {
+    this.ensureCropHandles().setChangeHandler(handler);
   }
 
   /**
