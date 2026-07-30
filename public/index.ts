@@ -1154,11 +1154,11 @@ function main() {
       const value = Number.isFinite(pixelInfo.value)
         ? Number.isInteger(pixelInfo.value)
           ? pixelInfo.value
-          : pixelInfo.value.toFixed(10)
+          : pixelInfo.value.toFixed(3)
         : "-";
       const channelName = myState.volume?.channelNames?.[channel] ?? `Channel ${channel}`;
       pixelInfoBox.textContent =
-        `x: ${pixelInfo.x}  y: ${pixelInfo.y}  z: ${pixelInfo.z}\n` + `${channelName}: ${value}`;
+        `x: ${pixelInfo.x}  y: ${pixelInfo.y}  z: ${pixelInfo.z}\n` + `Intensity: ${value}`;
       pixelInfoBox.style.display = "";
     } else {
       pixelInfoBox.style.display = "none";
