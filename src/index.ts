@@ -20,6 +20,7 @@ import {
   type RawArrayLoaderOptions,
 } from "./loaders/RawArrayLoader.js";
 import { TiffLoader } from "./loaders/TiffLoader.js";
+import { H5Loader, type H5LoaderOptions } from "./loaders/H5Loader.js";
 import VolumeLoaderContext from "./workers/VolumeLoaderContext.js";
 import { VolumeLoadError, VolumeLoadErrorType } from "./loaders/VolumeLoadError.js";
 import { type CameraState } from "./ThreeJsPanel.js";
@@ -59,6 +60,8 @@ export {
   type RawArrayInfo,
   type RawArrayLoaderOptions,
   TiffLoader,
+  H5Loader,
+  type H5LoaderOptions,
   VolumeLoaderContext,
   VolumeLoadError,
   VolumeLoadErrorType,

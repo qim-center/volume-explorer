@@ -45,6 +45,7 @@
     "@babel/runtime": "^7.25.6",
     "execa": "^9.6.1",
     "geotiff": "^2.0.5",
+    "jsfive": "^0.4.0",
     "serialize-error": "^11.0.3",
     "serve": "^14.2.6",
     "three": "^0.171.0",
