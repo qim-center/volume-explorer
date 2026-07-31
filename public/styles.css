@@ -1,6 +1,6 @@
 :root {
   --controls-item-margin-y: 2rem;
-  --form-control-color-radius: 0.3rem;
+  --form-control-radius: 0.5rem;
   --controls-color-input-height: 1.5rem;
 }
 
@@ -75,7 +75,7 @@ body {
   width: 2em;
   height: var(--controls-color-input-height);
   padding: 0.0rem 0.0rem;
-  border-radius: var(--form-control-color-radius);
+  border-radius: var(--form-control-radius);
   border-color: white;
 
 }
@@ -83,6 +83,45 @@ body {
 #controls-panel .form-check-input {
   height: var(--controls-color-input-height);
   width: 2.8rem;
+}
+
+#controls-panel .btn-secondary,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn) {
+  background-color: rgba(120, 120, 120, 0);
+  border-color: rgb(128, 128, 128);
+  color: white;
+  font-weight: 400;
+  border-radius: var(--form-control-radius);
+}
+
+#controls-panel .btn-secondary:hover,
+#controls-panel .btn-secondary:focus,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn):hover,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn):focus {
+  background-color: rgb(255, 255, 255, 0.85);
+  border-color: rgb(255, 255, 255, 0.85);
+  color: rgb(32, 32, 32);
+  box-shadow: none;
+}
+
+#controls-panel .btn-secondary:active,
+#controls-panel .btn-secondary.active,
+#controls-panel .btn-secondary.show,
+#controls-panel .btn-secondary.is-active,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn):active,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn).active,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn).show,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn).is-active {
+  background-color: rgb(255, 150, 0);
+  border-color: rgb(255, 150, 0);
+  color: rgb(32, 32, 32);
+}
+
+#controls-panel .btn-secondary:disabled,
+#controls-panel .btn-outline-secondary:not(.slice-view-buttons .btn):disabled {
+  background-color: rgb(88, 96, 104);
+  border-color: rgb(112, 118, 124);
+  color: rgba(255, 255, 255, 0.62);
 }
 
 .colormap-dropdown {
@@ -195,15 +234,15 @@ body {
 }
 
 #controls-panel .form-control-color::-webkit-color-swatch-wrapper {
-  border-radius: var(--form-control-color-radius);
+  border-radius: var(--form-control-radius);
 }
 
 #controls-panel .form-control-color::-webkit-color-swatch {
-  border-radius: var(--form-control-color-radius);
+  border-radius: var(--form-control-radius);
 }
 
 #controls-panel .form-control-color::-moz-color-swatch {
-  border-radius: var(--form-control-color-radius);
+  border-radius: var(--form-control-radius);
 }
 
 #viewer-panel {
