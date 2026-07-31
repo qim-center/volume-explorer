@@ -35,6 +35,7 @@ import {
   updateChannelIsovalueRange,
 } from "./app/gui/advancedGuiBuilder";
 import { bindPlaybackAndRenderControls, bindPrimaryViewControls } from "./app/ui/eventBinder";
+import { setupRangeFillSync } from "./app/ui/sliderFill";
 import { getAppUiElements } from "./app/ui/elementRegistry";
 import { createHistogramController } from "./app/histogram/histogramController";
 import { createColormapController } from "./app/colormap/colormapController";
@@ -1174,6 +1175,8 @@ function main() {
     view3D,
     setActiveSliceMode,
   });
+
+  setupRangeFillSync();
 
   const changeRenderMode = (pt: boolean, mp: boolean) => {
     myState.isPT = pt;

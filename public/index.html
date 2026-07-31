@@ -74,11 +74,10 @@
           <p id="scale-error" class="mt-2 mb-0"></p>
         </div>
 
-        <div class="controls-section-label">View adjustment</div>
-
+        
         <div class="controls-item">
+          <div class="controls-section-label">View selection</div>
           <div class="d-flex align-items-center justify-content-between mb-2">
-            <span id="slice-view-current" class="slice-view-current"></span>
             <div class="btn-group slice-view-buttons" role="group" aria-label="Ortho and 3D view controls">
               <button id="Z" type="button" class="btn btn-outline-secondary btn-sm">Z</button>
               <button id="Y" type="button" class="btn btn-outline-secondary btn-sm">Y</button>
@@ -86,6 +85,7 @@
               <button id="ORTHO" type="button" class="btn btn-outline-secondary btn-sm">Ortho</button>
               <button id="3D" type="button" class="btn btn-outline-secondary btn-sm is-active">3D</button>
             </div>
+            <span id="slice-view-current" class="slice-view-current"></span>
           </div>
 
           <div id="slice-selector-panel" class="slice-selector-panel hidden mb-2">
@@ -119,19 +119,13 @@
               </div>
             </div>
           </div>
-
-
-          <div class="d-flex align-items-center justify-content-between mt-3 mb-2">
-            <span>Cropping</span>
-            <div class="d-flex align-items-center gap-2 flex-nowrap">
-              <label for="cropHandlesToggle" class="col-form-label mb-0 text-nowrap">3D handles</label>
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" role="switch" id="cropHandlesToggle" aria-label="Toggle draggable 3D crop handles" />
-              </div>
-            </div>
+          
+          
+          <div class="d-flex align-items-center justify-content-between mt-4">
+            <div class="controls-section-label">Cropping</div>
           </div>
           
-          <div id="crop-row-z" class="d-flex align-items-center gap-2 flex-nowrap">
+          <div id="crop-row-z" class="d-flex align-items-center gap-2 flex-nowrap ">
             <label for="crop-z-min" class="col-form-label fw-semibold mb-0 text-nowrap">Z</label>
             <input id="crop-z-left" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="0" aria-label="Crop Z start index" />
             <div class="flex-grow-1">
@@ -174,11 +168,19 @@
                 <input id="crop-x-right" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="1" aria-label="Crop X end index" />
               </div>
             </div>
-            
-            <div class="flex mt-3 gap-2">
-              <button id="crop-copy-indeces-button" type="button" class="btn btn-outline-secondary btn-sm">Copy crop coordinates</button>
+
+
+            <div class="d-flex align-items-center gap-2 flex-nowrap controls-compact-grid mt-3">
+              <button id="crop-copy-indeces-button" type="button" class="btn btn-outline-secondary btn-sm">Copy coordinates</button>
               <button id="crop-reset-button" type="button" class="btn btn-outline-secondary btn-sm">Reset crop</button>
+              <label for="cropHandlesToggle" class="col-form-label mb-0 text-nowrap">3D handles</label>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="cropHandlesToggle" aria-label="Toggle draggable 3D crop handles" />
+              </div>
             </div>
+            
+
+
         </div>
 
       
@@ -212,9 +214,7 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="controls-item">
           <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
             <label for="global-opacity-slider" class="col-form-label mb-0 text-nowrap">Global opacity</label>
             <div class="d-flex align-items-center gap-2 flex-grow-1 w-100">
