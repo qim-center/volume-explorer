@@ -58,6 +58,15 @@ body {
   margin-top: 0;
 }
 
+#controls-panel .controls-title {
+  margin-bottom: 1.25rem;
+}
+
+#controls-panel .controls-title-heading {
+  margin: 0;
+  line-height: 1.15;
+}
+
 #controls-panel .form-control {
   background-color: white;
   color: rgb(33, 37, 41);
@@ -256,9 +265,47 @@ body {
   color: rgb(250, 50, 50);
 }
 
-#controls-panel .scale-level-highlight {
-  font-size: 1.5rem;
+#controls-panel .controls-section-label {
+  display: block;
+  padding: 0;
+  margin: 0 0 0.35rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
   font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+#controls-panel .controls-compact-grid {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+
+#controls-panel .controls-compact-column,
+#controls-panel .scale-control-stack {
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 0.35rem;
+}
+
+#controls-panel .controls-compact-grid #scale-error {
+  grid-column: 1 / -1;
+}
+
+#controls-panel .scale-select {
+  width: auto;
+  min-width: 7rem;
+}
+
+#controls-panel .scale-current-label {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.78rem;
+  line-height: 1.2;
 }
 
 #controls-panel .scale-loading-indicator {

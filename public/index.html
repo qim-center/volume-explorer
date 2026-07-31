@@ -24,10 +24,12 @@
   <body>
     <div class="flex-layout">
       <div id="controls-panel" class="panel">
-        <h2 class="controls-item">Qim Volume Explorer</h2>
+        <div class="controls-item controls-title">
+          <h2 class="controls-title-heading">Qim Volume Explorer</h2>
+        </div>
         <div class="controls-item">
           <form id="source-form" class="row g-2 align-items-center">
-            <label for="source-url-input" class="col-12 col-form-label">Source</label>
+            <label for="source-url-input" class="controls-section-label col-12 col-form-label">Source</label>
             <div class="col-12 col-sm">
               <input id="source-url-input" type="text" class="form-control" placeholder="Paste URL" />
             </div>
@@ -38,63 +40,41 @@
           <p id="source-error" class="mt-2 mb-0"></p>
         </div>
         
-        <div class="controls-item">
-          <div class="row row-cols-1 g-2">
-            <div class="col">
-              <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
-                <label for="ome-zarr-scale-select" class="col-form-label mb-0 text-nowrap">
-                  <span class="scale-level-highlight">Current scale</span>
-                  <span class="scale-level-highlight">(<span id="ome-zarr-scale-level-value">-</span>)</span>
-                  <span
-                  id="ome-zarr-scale-loading-indicator"
-                  class="scale-loading-indicator"
-                  aria-hidden="true"
-                  title="Loading scale data"
-                  ></span>
-                </label>
-              </div>
-              <div>
-                <select id="ome-zarr-scale-select" class="form-select form-select-sm w-auto">
-                  <option value="auto" selected>Auto</option>
-                </select>
+        <div class="controls-item controls-compact-grid">
+          <div class="controls-compact-column scale-control-stack">
+            <label for="ome-zarr-scale-select" class="controls-section-label col-form-label">OME-Zarr scale</label>
+            <select id="ome-zarr-scale-select" class="form-select form-select-sm scale-select">
+              <option value="auto" selected>Auto</option>
+            </select>
+            <span class="scale-current-label">
+              Level (<span id="ome-zarr-scale-level-value">-</span>)
+              <span
+                id="ome-zarr-scale-loading-indicator"
+                class="scale-loading-indicator"
+                aria-hidden="true"
+                title="Loading scale data"
+              ></span>
+            </span>
+          </div>
+
+          <div class="controls-compact-column">
+            <div class="controls-section-label">Background</div>
+            <input type="color" id="backgroundColor" class="form-control form-control-color flex-shrink-0" value="#e6e6e6" title="Background color" />
+          </div>
+
+          <div class="controls-compact-column">
+            <div class="controls-section-label">Grid</div>
+            <div class="d-flex align-items-center gap-2 flex-nowrap">
+              <input type="color" id="boundingBoxColor" class="form-control form-control-color flex-shrink-0" value="#4d4d4d" title="Bounding box color" />
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="showBoundingBox" aria-label="Toggle bounding box" />
               </div>
             </div>
           </div>
           <p id="scale-error" class="mt-2 mb-0"></p>
         </div>
-        
-        <div class="controls-item">
-          <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap mb-3">
-            <details id="colormap-dropdown" class="colormap-dropdown flex-grow-1">
-              <summary id="colormap-dropdown-toggle" class="colormap-dropdown-toggle" aria-label="Choose colormap">
-                <span id="colormap-dropdown-preview" class="colormap-dropdown-preview" aria-hidden="true"></span>
-              </summary>
-              <div id="colormap-picker" class="colormap-picker" role="listbox" aria-label="Colormap picker"></div>
-            </details>
-            <button id="colormap-invert-toggle" type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0" aria-pressed="false" title="Invert colormap">
-              Invert scale
-            </button>
-          </div>
-          <div class="row row-cols-1 row-cols-md-2 g-3">
-            <div class="col">
-              <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
-                <label for="backgroundColor" class="col-form-label mb-0 text-nowrap">Background</label>
-                <input type="color" id="backgroundColor" class="form-control form-control-color flex-shrink-0" value="#e6e6e6" title="Background color" />
-              </div>
-            </div>
-            <div class="col">
-              <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap">
-                <label for="showBoundingBox" class="col-form-label mb-0 text-nowrap">Grid</label>
-                <div class="d-flex align-items-center gap-2 flex-nowrap">
-                  <input type="color" id="boundingBoxColor" class="form-control form-control-color flex-shrink-0" value="#4d4d4d" title="Bounding box color" />
-                  <div class="form-check form-switch mb-0">
-                    <input class="form-check-input" type="checkbox" role="switch" id="showBoundingBox" aria-label="Toggle bounding box" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+
+        <div class="controls-section-label">View adjustment</div>
 
         <div class="controls-item">
           <div class="d-flex align-items-center justify-content-between mb-2">
@@ -139,6 +119,7 @@
               </div>
             </div>
           </div>
+
 
           <div class="d-flex align-items-center justify-content-between mt-3 mb-2">
             <span>Cropping</span>
@@ -201,8 +182,22 @@
         </div>
 
       
-        <div class="controls-item border rounded-2 overflow-hidden">
-          <canvas id="histogram-canvas" width="2048px" height="1024px"></canvas>
+        <div class="controls-item">
+          <div class="controls-section-label">Colormap adjustment</div>
+          <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap mb-2">
+            <details id="colormap-dropdown" class="colormap-dropdown flex-grow-1">
+              <summary id="colormap-dropdown-toggle" class="colormap-dropdown-toggle" aria-label="Choose colormap">
+                <span id="colormap-dropdown-preview" class="colormap-dropdown-preview" aria-hidden="true"></span>
+              </summary>
+              <div id="colormap-picker" class="colormap-picker" role="listbox" aria-label="Colormap picker"></div>
+            </details>
+            <button id="colormap-invert-toggle" type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0" aria-pressed="false" title="Invert colormap">
+              Invert scale
+            </button>
+          </div>
+          <div class="border rounded-2 overflow-hidden">
+            <canvas id="histogram-canvas" width="2048px" height="1024px"></canvas>
+          </div>
         </div>
 
         <div class="controls-item">
