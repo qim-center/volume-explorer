@@ -3,12 +3,12 @@
   --form-control-radius: 0.5rem;
   --controls-color-input-height: 1.5rem;
 
-  --range-track: lightsteelblue;
-  --range-fill: steelblue;
+  --range-track: rgba(0, 0, 0, 0.1);
+  --range-fill: rgba(255, 255, 255, 0.5);
   --range-thumb-bg: #ffffff;
-  --range-thumb-border: steelblue;
-  --range-thumb-size: 12px;
-  --range-track-height: 6px;
+  --range-thumb-border: #ffffff;
+  --range-thumb-size: 10px;
+  --range-track-height: 10px;
 }
 
 html,
@@ -423,8 +423,8 @@ body.volume-loading #viewer-panel .volume-loading-overlay {
   right: 0;
   top: 50%;
   height: var(--range-track-height);
-  transform: translateY(-50%);
-  border-radius: 999px;
+  transform: translateY(-6px);
+  border-radius: 4px;
 }
 
 .crop-track {
@@ -434,7 +434,7 @@ body.volume-loading #viewer-panel .volume-loading-overlay {
 
 .crop-fill {
   background: var(--range-fill);
-  z-index: 1;
+  z-index: 5;
 }
 
 .crop-handle {
@@ -442,11 +442,12 @@ body.volume-loading #viewer-panel .volume-loading-overlay {
   inset: 0;
   width: 100%;
   margin: 0;
-  z-index: 2;
+  z-index: 9;
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
   pointer-events: none;
+  opacity: 1;
 }
 
 .crop-handle[id$="-min"] {
@@ -547,9 +548,9 @@ input[type="range"]:disabled::-moz-range-thumb {
   cursor: not-allowed;
 }
 
-.crop-handle::-webkit-slider-runnable-track,
-.crop-handle::-moz-range-track,
-.crop-handle::-moz-range-progress {
+input[type="range"].crop-handle::-webkit-slider-runnable-track,
+input[type="range"].crop-handle::-moz-range-track,
+input[type="range"].crop-handle::-moz-range-progress {
   background: transparent;
 }
 
