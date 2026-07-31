@@ -15,6 +15,7 @@ import { Pane } from "tweakpane";
 
 import { CameraState, MESH_LAYER, ThreeJsPanel } from "./ThreeJsPanel.js";
 import lightSettings from "./constants/lights.js";
+import CropHandles, { CropHandlesChangeHandler, CropRegion } from "./CropHandles.js";
 import VolumeDrawable from "./VolumeDrawable.js";
 import { Light, AREA_LIGHT, SKY_LIGHT } from "./Light.js";
 import Volume from "./Volume.js";
@@ -62,6 +63,7 @@ export class View3d {
   private loadStartHandler?: (volume: Volume) => void;
   private loadErrorHandler?: (volume: Volume, error: unknown) => void;
   private image?: VolumeDrawable;
+  private cropHandles?: CropHandles;
 
   private lights: Light[];
   private lightContainer: Object3D;
@@ -151,7 +153,12 @@ export class View3d {
    * @param {Object} dataurlcallback function to call when data url is ready; function accepts dataurl as string arg
    */
   capture(dataurlcallback: (name: string) => void): void {
-    return this.canvas3d.requestCapture(dataurlcallback);
+    const handles = this.cropHandles;
+    handles?.setHiddenForCapture(true);
+    return this.canvas3d.requestCapture((url) => {
+      handles?.setHiddenForCapture(false);
+      dataurlcallback(url);
+    });
   }
 
   getDOMElement(): HTMLDivElement {
@@ -812,6 +819,7 @@ export class View3d {
    * @param {number} ymax 0..1, should be greater than ymin
    * @param {number} zmin 0..1, should be less than zmax
    * @param {number} zmax 0..1, should be greater than zmin
+   * @param {boolean} [recenter=true]
    */
   updateVisibleRegion(
     volume: Volume,
@@ -820,10 +828,11 @@ export class View3d {
     ymin: number,
     ymax: number,
     zmin: number,
-    zmax: number
+    zmax: number,
+    recenter = true
   ): void {
     this.image?.updateVisibleRegion(xmin, xmax, ymin, ymax, zmin, zmax);
-    if (this.image) {
+    if (this.image && recenter) {
       const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
       this.recenterControlsTarget(center);
     }
@@ -1124,6 +1133,72 @@ export class View3d {
       return -1;
     }
     return this.canvas3d.hitTest(offsetX, offsetY, this.image.getPickBuffer());
+  }
+
+  private ensureCropHandles(): CropHandles {
+    if (!this.cropHandles) {
+      this.cropHandles = new CropHandles({
+        scene: this.scene,
+        getCamera: () => this.canvas3d.camera,
+        getCanvas: () => this.canvas3d.renderer.domElement,
+        getControls: () => this.canvas3d.controls,
+        getVolumeExtent: () => this.image?.volume.normPhysicalSize.clone() ?? null,
+        redraw: this.redraw,
+        onInteractionStart: () => this.onStartControls(),
+        onInteractionEnd: () => this.onEndControls(),
+      });
+    }
+    return this.cropHandles;
+  }
+
+  setCropHandlesEnabled(enabled: boolean): void {
+    if (!enabled && !this.cropHandles) {
+      return;
+    }
+    this.ensureCropHandles().setEnabled(enabled);
+  }
+
+  setCropHandlesRegion(region: CropRegion): void {
+    this.ensureCropHandles().setRegion(region);
+  }
+
+  setCropHandlesChangeHandler(handler: CropHandlesChangeHandler | undefined): void {
+    this.ensureCropHandles().setChangeHandler(handler);
+  }
+
+  /**
+   * Get the voxel coordinates and intensity value of the pixel under a screen coordinate, for use
+   * in 2D slice views (X, Y, or Z). Returns `null` when not in a single-axis slice view or when
+   * the coordinate falls outside the volume.
+   * @param offsetX mouse x coordinate, in CSS pixels relative to the canvas
+   * @param offsetY mouse y coordinate, in CSS pixels relative to the canvas
+   * @param channelIndex channel to read the intensity value from (default 0)
+   * @returns `{ x, y, z, value }` in full-volume voxel coordinates, or `null`
+   */
+  getSlicePixelInfo(
+    offsetX: number,
+    offsetY: number,
+    channelIndex = 0
+  ): { x: number; y: number; z: number; value: number } | null {
+    if (!this.image) {
+      return null;
+    }
+    const camera = this.canvas3d.camera;
+    if (!isOrthographicCamera(camera)) {
+      return null;
+    }
+    const canvas = this.canvas3d.renderer.domElement;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!width || !height) {
+      return null;
+    }
+    // Convert to normalized device coordinates and unproject into world space. For an orthographic
+    // camera the depth component is irrelevant to the resulting x/y, so any value works.
+    const ndcX = (offsetX / width) * 2 - 1;
+    const ndcY = -(offsetY / height) * 2 + 1;
+    const worldPoint = new Vector3(ndcX, ndcY, 0).unproject(camera);
+    return this.image.getSlicePixelInfo(worldPoint, channelIndex);
   }
 
   private setupGui(container: HTMLElement): Pane {

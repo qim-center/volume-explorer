@@ -77,10 +77,28 @@ const cropSliceManager = createCropSliceManager({
   state: myState,
   getView3D: () => view3D,
   goToZSlice,
+  onCropRegionApplied: () => syncCropHandlesFromState(),
 });
 
 function applyCropRegionFromState() {
   cropSliceManager.applyCropRegionFromState();
+}
+
+function getCropRegionFromState() {
+  return {
+    xmin: myState.cropXmin,
+    xmax: myState.cropXmax,
+    ymin: myState.cropYmin,
+    ymax: myState.cropYmax,
+    zmin: myState.cropZmin,
+    zmax: myState.cropZmax,
+  };
+}
+
+function syncCropHandlesFromState() {
+  if (view3D) {
+    view3D.setCropHandlesRegion(getCropRegionFromState());
+  }
 }
 
 function getEffectiveAxisLoadBounds(axis: "x" | "y" | "z") {
@@ -95,8 +113,24 @@ function resetSliceIndicesForVolume(volume: Volume) {
   cropSliceManager.resetSliceIndicesForVolume(volume);
 }
 
+let cropHandlesToggleOn = false;
+let currentCameraMode: CameraMode = "3D";
+
+function updateCropHandlesEnabled() {
+  if (!view3D) {
+    return;
+  }
+  const enabled = cropHandlesToggleOn && currentCameraMode === "3D";
+  view3D.setCropHandlesEnabled(enabled);
+  if (enabled) {
+    syncCropHandlesFromState();
+  }
+}
+
 function setActiveSliceMode(mode: CameraMode) {
   cropSliceManager.setActiveSliceMode(mode);
+  currentCameraMode = mode;
+  updateCropHandlesEnabled();
 }
 
 function setupCropControls() {
@@ -841,6 +875,40 @@ function main() {
   view3D.setBackgroundColor(myState.backgroundColor);
   syncColorInputsToState();
 
+  view3D.setCropHandlesChangeHandler((region, committed) => {
+    myState.cropXmin = region.xmin;
+    myState.cropXmax = region.xmax;
+    myState.cropYmin = region.ymin;
+    myState.cropYmax = region.ymax;
+    myState.cropZmin = region.zmin;
+    myState.cropZmax = region.zmax;
+    syncCropInputsFromState();
+
+    if (committed) {
+      applyCropRegionFromState();
+    } else {
+      view3D.updateVisibleRegion(
+        myState.volume,
+        region.xmin,
+        region.xmax,
+        region.ymin,
+        region.ymax,
+        region.zmin,
+        region.zmax,
+        false
+      );
+    }
+  });
+
+  const cropHandlesToggle = document.getElementById("cropHandlesToggle") as HTMLInputElement | null;
+  if (cropHandlesToggle) {
+    cropHandlesToggle.checked = cropHandlesToggleOn;
+    cropHandlesToggle.addEventListener("change", () => {
+      cropHandlesToggleOn = cropHandlesToggle.checked;
+      updateCropHandlesEnabled();
+    });
+  }
+
   if (turntableParam === "true") {
     const appLayout = document.querySelector(".flex-layout");
     appLayout?.addEventListener("mouseenter", () => {
@@ -1038,6 +1106,36 @@ function main() {
     });
   }
 
+  // Small readout in the bottom-right of the viewer showing the voxel coordinates and intensity
+  // value under the cursor, while hovering a 2D slice view (X, Y, or Z).
+  const pixelInfoBox = document.createElement("div");
+  Object.assign(pixelInfoBox.style, {
+    fontFamily: "monospace",
+    position: "absolute",
+    left: "50%",
+    transform: "translateX(-50%)",
+    bottom: "20px",
+    width: "240px",
+    boxSizing: "border-box",
+    padding: "6px 8px",
+    background: "rgba(0, 0, 0, 0.6)",
+    color: "white",
+    fontSize: "12px",
+    lineHeight: "1.4",
+    borderRadius: "4px",
+    pointerEvents: "none",
+    whiteSpace: "pre",
+    textAlign: "center",
+    display: "none",
+    zIndex: "10",
+  } as Partial<CSSStyleDeclaration>);
+  view3D.getDOMElement().appendChild(pixelInfoBox);
+
+  const getHoverChannel = (): number => {
+    const enabled = myState.channelGui?.findIndex((ch) => ch.enabled);
+    return enabled !== undefined && enabled >= 0 ? enabled : 0;
+  };
+
   el.addEventListener("mousemove", (e: Event) => {
     const event = e as MouseEvent;
     const intersectedObject = view3D.hitTest(event.offsetX, event.offsetY);
@@ -1049,6 +1147,26 @@ function main() {
       el.style.cursor = "default";
       view3D.setSelectedID(myState.volume, myState.colorizeChannel, -1);
     }
+
+    const channel = getHoverChannel();
+    const pixelInfo = view3D.getSlicePixelInfo(event.offsetX, event.offsetY, channel);
+    if (pixelInfo) {
+      const value = Number.isFinite(pixelInfo.value)
+        ? Number.isInteger(pixelInfo.value)
+          ? pixelInfo.value
+          : pixelInfo.value.toFixed(3)
+        : "-";
+      const channelName = myState.volume?.channelNames?.[channel] ?? `Channel ${channel}`;
+      pixelInfoBox.textContent =
+        `x: ${pixelInfo.x}  y: ${pixelInfo.y}  z: ${pixelInfo.z}\n` + `Intensity: ${value}`;
+      pixelInfoBox.style.display = "";
+    } else {
+      pixelInfoBox.style.display = "none";
+    }
+  });
+
+  el.addEventListener("mouseleave", () => {
+    pixelInfoBox.style.display = "none";
   });
 
   bindPrimaryViewControls({
