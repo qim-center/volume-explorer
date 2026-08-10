@@ -52,7 +52,7 @@ Options:
 
 Examples:
   volume-explorer
-  volume-explorer https://platform.qim.dk/qim-public/escargot/escargot.zarr
+  volume-explorer https://public.qim.dk/escargot/escargot.zarr/
   volume-explorer --src https://example.org/sample.zarr --hidden --scale last`);
 }
 
