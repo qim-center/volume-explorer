@@ -18,11 +18,11 @@ You can also run it without a global install:
 
 To open a dataset directly:
 
-`volume-explorer https://platform.qim.dk/qim-public/escargot/escargot.zarr`
+`volume-explorer https://public.qim.dk/escargot/escargot.zarr/`
 
 or
 
-`volume-explorer --src https://platform.qim.dk/qim-public/escargot/escargot.zarr`
+`volume-explorer --src https://public.qim.dk/escargot/escargot.zarr/`
 
 The published package now ships a production Vite build, including the worker and shader bundles used for volumetric rendering.
 
