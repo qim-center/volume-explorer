@@ -912,11 +912,12 @@ function main() {
 
   if (turntableParam === "true") {
     const appLayout = document.querySelector(".flex-layout");
+    view3D.setAutoRotate(true);
     appLayout?.addEventListener("mouseenter", () => {
-      view3D.setAutoRotate(true);
+      view3D.setAutoRotate(false);
     });
     appLayout?.addEventListener("mouseleave", () => {
-      view3D.setAutoRotate(false);
+      view3D.setAutoRotate(true);
     });
   }
 
