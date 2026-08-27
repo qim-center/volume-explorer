@@ -45,12 +45,8 @@
     "@babel/runtime": "^7.25.6",
     "execa": "^9.6.1",
     "geotiff": "^2.0.5",
-<<<<<<< HEAD
-    "jsfive": "^0.4.0",
-=======
     "jsfive": "^0.4.0",
     "lil-gui": "^0.19.2",
->>>>>>> 4e5e7d8 (Side menu redesign (#41))
     "serialize-error": "^11.0.3",
     "serve": "^14.2.6",
     "three": "^0.171.0",
