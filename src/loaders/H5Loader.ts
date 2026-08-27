@@ -35,8 +35,16 @@ export type H5LoaderOptions = {
   datasetName?: string;
 };
 
-/** Map a jsfive dtype string (e.g. `"<u2"`, `">f4"`, `"|u1"`) to one of our supported `NumberType`s. */
-function jsfiveDtypeToNumberType(dtype: unknown, datasetKey: string): NumberType {
+/** A jsfive dtype string (e.g. "<u2", ">f4", "|u1") parsed into its kind and width in bits. */
+type SourceDtype = { kind: "i" | "u" | "f"; bits: number };
+
+const INT32_RANGES: Partial<Record<NumberType, [number, number]>> = {
+  int32: [-2147483648, 2147483647],
+  uint32: [0, 4294967295],
+};
+
+/** Parse a jsfive dtype string into the kind/width pair the rest of the loader works with. */
+function parseJsfiveDtype(dtype: unknown, datasetKey: string): SourceDtype {
   const match = typeof dtype === "string" ? dtype.match(/^[<>=|]?(i|u|f)(\d+)$/) : null;
   if (!match) {
     throw new VolumeLoadError(`Dataset "${datasetKey}" has an unsupported HDF5 datatype "${String(dtype)}"`, {
@@ -45,19 +53,48 @@ function jsfiveDtypeToNumberType(dtype: unknown, datasetKey: string): NumberType
   }
 
   const [, kind, sizeStr] = match;
-  const bits = Number(sizeStr) * 8;
+  return { kind: kind as SourceDtype["kind"], bits: Number(sizeStr) * 8 };
+}
+
+/**
+ * Map a source dtype to the NumberType passed to the renderer
+ *
+ * WebGL2 has no 64-bit texture formats, so 64-bit datasets must be narrowed to 32 bits: 
+ * float64 becomes float32 (the same as OmeZarrLoader functions), and 
+ * int64/uint64 become int32/uint32
+ */
+function renderableNumberType({ kind, bits }: SourceDtype): NumberType {
   switch (kind) {
     case "i":
       return bits <= 8 ? "int8" : bits <= 16 ? "int16" : "int32";
     case "u":
       return bits <= 8 ? "uint8" : bits <= 16 ? "uint16" : "uint32";
     default:
-      return bits <= 32 ? "float32" : "float64";
+      return "float32";
   }
 }
 
-/** Convert a flat number[] (as returned by jsfive's `Dataset.value`) into a typed array of the given `dtype`. */
-function toTypedArray(data: number[], dtype: NumberType): TypedArray<NumberType> {
+/**
+ * Convert a flat number[] (as returned by jsfive's Dataset.value) into a typed array (dtype) that can be rendered
+ */
+function toTypedArray(
+  data: number[],
+  source: SourceDtype,
+  dtype: NumberType,
+  datasetKey: string
+): TypedArray<NumberType> {
+  const targetRange = source.kind !== "f" && source.bits === 64 ? INT32_RANGES[dtype] : undefined;
+  if (targetRange) {
+    const [min, max] = getDataRange(data);
+    if (min < targetRange[0] || max > targetRange[1]) {
+      throw new VolumeLoadError(
+        `Dataset "${datasetKey}" is ${source.kind === "i" ? "int64" : "uint64"}, which must be narrowed to ` +
+          `${dtype} to be rendered, but its values span [${min}, ${max}] and do not fit that range.`,
+        { type: VolumeLoadErrorType.INVALID_METADATA }
+      );
+    }
+  }
+
   const ctor = ARRAY_CONSTRUCTORS[dtype];
   return new ctor(data) as TypedArray<NumberType>;
 }
@@ -116,7 +153,7 @@ class H5Loader extends ThreadableVolumeLoader {
   private readonly datasetShape: number[];
   /** `0` when the dataset has a leading channel axis (4-D), `-1` when absent (3-D). */
   private readonly channelAxisIndex: 0 | -1;
-  /** Numeric type of the dataset's elements. */
+  private readonly sourceDtype: SourceDtype;
   private readonly dtype: NumberType;
   /** Physical voxel spacing `[sz, sy, sx]`. */
   private readonly spacing: [number, number, number];
@@ -145,7 +182,8 @@ class H5Loader extends ThreadableVolumeLoader {
     }
     this.datasetShape = shape;
     this.channelAxisIndex = shape.length === 4 ? 0 : -1;
-    this.dtype = jsfiveDtypeToNumberType(ds.dtype, this.datasetKey);
+    this.sourceDtype = parseJsfiveDtype(ds.dtype, this.datasetKey);
+    this.dtype = renderableNumberType(this.sourceDtype);
 
     const attrs = ds.attrs;
     const spacingAttr = attrs["spacing"];
@@ -243,7 +281,7 @@ class H5Loader extends ThreadableVolumeLoader {
   private getFullData(): TypedArray<NumberType> {
     if (!this.cachedData) {
       const ds = this.file.get(this.datasetKey) as H5Dataset;
-      this.cachedData = toTypedArray(ds.value, this.dtype);
+      this.cachedData = toTypedArray(ds.value, this.sourceDtype, this.dtype, this.datasetKey);
     }
     return this.cachedData;
   }
