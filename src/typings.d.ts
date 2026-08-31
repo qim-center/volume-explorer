@@ -14,6 +14,13 @@ declare module "jsfive" {
     readonly keys: string[];
     get(path: string): Dataset | Group | null;
   }
+  
+  export interface DataObjects {
+    readonly fh: ArrayBuffer;
+    find_msg_type(msgType: number): Map<string, number>[];
+    _get_data_message_properties(msgOffset: number): [number, number, number, number];
+    readonly filter_pipeline: unknown[] | null;
+  }
 
   export class Dataset {
     readonly name: string;
@@ -21,6 +28,7 @@ declare module "jsfive" {
     readonly dtype: string | unknown[];
     readonly attrs: Record<string, unknown>;
     readonly value: number[];
+    readonly _dataobjects: DataObjects;
   }
 
   export class File extends Group {

@@ -28,41 +28,50 @@ import { VolumeLoadError, VolumeLoadErrorType, wrapVolumeLoadError } from "./Vol
  */
 export type H5LoaderOptions = {
   /**
-   * Path inside the HDF5 file to the dataset to load, e.g. `"volume"` or `"entry/data"`. Required when the file
-   * contains more than one dataset with ndim 3 or 4. When omitted and only one such dataset exists, the loader
-   * selects it automatically.
+   * Path inside the HDF5 file to the dataset to load, required when the file contains more than one dataset.
    */
   datasetName?: string;
+
+  /**
+   * Memory ceiling, in bytes, for datasets that can't use the contiguous fast path (chunked and/or compressed datasets)
+   * Defaults to 2 GiB.
+   */
+  maxFallbackBytes?: number;
 };
 
-/** A jsfive dtype string (e.g. "<u2", ">f4", "|u1") parsed into its kind and width in bits. */
-type SourceDtype = { kind: "i" | "u" | "f"; bits: number };
+const DEFAULT_MAX_FALLBACK_BYTES = 2 * 1024 ** 3;
+
+/** A jsfive dtype string (e.g. "<u2", ">f4", "|u1") parsed into its kind, width in bits, and byte order. */
+type SourceDtype = { kind: "i" | "u" | "f"; bits: number; littleEndian: boolean };
 
 const INT32_RANGES: Partial<Record<NumberType, [number, number]>> = {
   int32: [-2147483648, 2147483647],
   uint32: [0, 4294967295],
 };
 
-/** Parse a jsfive dtype string into the kind/width pair the rest of the loader works with. */
+const HOST_IS_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;
+
+/**
+ * Parse a jsfive dtype string into the kind/width/byte-order triple the rest of the loader works with.
+ */
 function parseJsfiveDtype(dtype: unknown, datasetKey: string): SourceDtype {
-  const match = typeof dtype === "string" ? dtype.match(/^[<>=|]?(i|u|f)(\d+)$/) : null;
+  const match = typeof dtype === "string" ? dtype.match(/^([<>=!|])?(i|u|f)(\d+)$/) : null;
   if (!match) {
     throw new VolumeLoadError(`Dataset "${datasetKey}" has an unsupported HDF5 datatype "${String(dtype)}"`, {
       type: VolumeLoadErrorType.INVALID_METADATA,
     });
   }
 
-  const [, kind, sizeStr] = match;
-  return { kind: kind as SourceDtype["kind"], bits: Number(sizeStr) * 8 };
+  const [, byteOrder, kind, sizeStr] = match;
+  const bigEndian = byteOrder === ">" || byteOrder === "!";
+  const littleEndian = byteOrder === "<" ? true : bigEndian ? false : HOST_IS_LITTLE_ENDIAN;
+  return { kind: kind as SourceDtype["kind"], bits: Number(sizeStr) * 8, littleEndian };
 }
 
-/**
- * Map a source dtype to the NumberType passed to the renderer
- *
- * WebGL2 has no 64-bit texture formats, so 64-bit datasets must be narrowed to 32 bits: 
- * float64 becomes float32 (the same as OmeZarrLoader functions), and 
- * int64/uint64 become int32/uint32
- */
+function narrowsFrom64BitInteger({ kind, bits }: SourceDtype): boolean {
+  return kind !== "f" && bits === 64;
+}
+
 function renderableNumberType({ kind, bits }: SourceDtype): NumberType {
   switch (kind) {
     case "i":
@@ -75,28 +84,147 @@ function renderableNumberType({ kind, bits }: SourceDtype): NumberType {
 }
 
 /**
- * Convert a flat number[] (as returned by jsfive's Dataset.value) into a typed array (dtype) that can be rendered
+ * Narrow values read from a 64-bit integer dataset into dtype, the 32-bit type renderableNumberType picked for it.
  */
+function narrowInto32BitInteger(
+  data: ArrayLike<number>,
+  source: SourceDtype,
+  dtype: NumberType,
+  datasetKey: string
+): TypedArray<NumberType> {
+  const targetRange = INT32_RANGES[dtype];
+  const [min, max] = getDataRange(data);
+  if (targetRange && (min < targetRange[0] || max > targetRange[1])) {
+    throw new VolumeLoadError(
+      `Dataset "${datasetKey}" is ${source.kind === "i" ? "int64" : "uint64"}, which must be narrowed to ` +
+        `${dtype} to be rendered, but its values span [${min}, ${max}] and do not fit that range.`,
+      { type: VolumeLoadErrorType.INVALID_METADATA }
+    );
+  }
+
+  const ctor = ARRAY_CONSTRUCTORS[dtype];
+  return new ctor(data) as TypedArray<NumberType>;
+}
+
 function toTypedArray(
   data: number[],
   source: SourceDtype,
   dtype: NumberType,
   datasetKey: string
 ): TypedArray<NumberType> {
-  const targetRange = source.kind !== "f" && source.bits === 64 ? INT32_RANGES[dtype] : undefined;
-  if (targetRange) {
-    const [min, max] = getDataRange(data);
-    if (min < targetRange[0] || max > targetRange[1]) {
-      throw new VolumeLoadError(
-        `Dataset "${datasetKey}" is ${source.kind === "i" ? "int64" : "uint64"}, which must be narrowed to ` +
-          `${dtype} to be rendered, but its values span [${min}, ${max}] and do not fit that range.`,
-        { type: VolumeLoadErrorType.INVALID_METADATA }
-      );
-    }
+  if (narrowsFrom64BitInteger(source)) {
+    return narrowInto32BitInteger(data, source, dtype, datasetKey);
   }
 
   const ctor = ARRAY_CONSTRUCTORS[dtype];
   return new ctor(data) as TypedArray<NumberType>;
+}
+
+/** HDF5 "Data Layout" message type, and the layout class value that means contiguous storage. */
+const DATA_STORAGE_MSG_TYPE = 0x0008;
+const LAYOUT_CLASS_CONTIGUOUS = 1;
+
+/**
+ * Per-element readers for contiguous files (one span of bytes in C order, so any sub-region can be read directly
+ */
+const BYTE_READERS: Record<string, ((view: DataView, offset: number, littleEndian: boolean) => number) | undefined> = {
+  i8: (v, o) => v.getInt8(o),
+  u8: (v, o) => v.getUint8(o),
+  i16: (v, o, le) => v.getInt16(o, le),
+  u16: (v, o, le) => v.getUint16(o, le),
+  i32: (v, o, le) => v.getInt32(o, le),
+  u32: (v, o, le) => v.getUint32(o, le),
+  i64: (v, o, le) => Number(v.getBigInt64(o, le)),
+  u64: (v, o, le) => Number(v.getBigUint64(o, le)),
+  f32: (v, o, le) => v.getFloat32(o, le),
+  f64: (v, o, le) => v.getFloat64(o, le),
+};
+
+function getContiguousDataOffset(ds: H5Dataset, source: SourceDtype, expectedBytes: number): number | undefined {
+  if (!BYTE_READERS[`${source.kind}${source.bits}`]) {
+    return undefined;
+  }
+
+  try {
+    const dataObjects = ds._dataobjects;
+    const msgOffset = dataObjects.find_msg_type(DATA_STORAGE_MSG_TYPE)[0]?.get("offset_to_message");
+    if (msgOffset === undefined) {
+      return undefined;
+    }
+
+    const [, , layoutClass, propertyOffset] = dataObjects._get_data_message_properties(msgOffset);
+    if (layoutClass !== LAYOUT_CLASS_CONTIGUOUS || dataObjects.filter_pipeline) {
+      return undefined;
+    }
+
+    const view = new DataView(dataObjects.fh);
+    const low = view.getUint32(propertyOffset, true);
+    const high = view.getUint32(propertyOffset + 4, true);
+    if (low === 0xffffffff && high === 0xffffffff) {
+      return undefined;
+    }
+
+    const address = high * 0x100000000 + low;
+    return address + expectedBytes > dataObjects.fh.byteLength ? undefined : address;
+  } catch (_e) {
+    // These internals are not part of jsfive's public API, so if errors are cought, revert back
+    return undefined;
+  }
+}
+
+/**
+ * Read one channel of a contiguously stored dataset directly out of the file buffer, decimating X and Y to the
+ * atlas tile size as each Z slice is read.
+ *
+ * This mirrors what FetchTiffWorker does for TIFF: the destination is allocated at its final size and a
+ * full-resolution copy of the volume never exists. Only the voxels the atlas will show are read, so for volumes
+ * far larger than the atlas this also skips most of the file.
+ */
+function readContiguousChannel(
+  buffer: ArrayBuffer,
+  dataOffset: number,
+  source: SourceDtype,
+  dtype: NumberType,
+  datasetKey: string,
+  [z, y, x]: [number, number, number],
+  ty: number,
+  tx: number,
+  channel: number
+): TypedArray<NumberType> {
+  const read = BYTE_READERS[`${source.kind}${source.bits}`]!;
+  const view = new DataView(buffer);
+  const bytes = source.bits / 8;
+  const littleEndian = source.littleEndian;
+
+  // Precompute which source row and column each destination row and column samples
+  const rowOffsets = new Float64Array(ty);
+  for (let yi = 0; yi < ty; yi++) {
+    rowOffsets[yi] = Math.min(y - 1, Math.floor((yi * y) / ty)) * x * bytes;
+  }
+  const colOffsets = new Float64Array(tx);
+  for (let xi = 0; xi < tx; xi++) {
+    colOffsets[xi] = Math.min(x - 1, Math.floor((xi * x) / tx)) * bytes;
+  }
+
+  // 64-bit integers are collected as plain numbers first so narrowInto32BitInteger sees their true values
+  const narrows64 = narrowsFrom64BitInteger(source);
+  const ctor = narrows64 ? ARRAY_CONSTRUCTORS.float64 : ARRAY_CONSTRUCTORS[dtype];
+  const out = new ctor(z * ty * tx) as TypedArray<NumberType>;
+
+  const sliceBytes = y * x * bytes;
+  const channelBase = dataOffset + channel * z * sliceBytes;
+  let i = 0;
+  for (let zi = 0; zi < z; zi++) {
+    const sliceBase = channelBase + zi * sliceBytes;
+    for (let yi = 0; yi < ty; yi++) {
+      const rowBase = sliceBase + rowOffsets[yi];
+      for (let xi = 0; xi < tx; xi++) {
+        out[i++] = read(view, rowBase + colOffsets[xi], littleEndian);
+      }
+    }
+  }
+
+  return narrows64 ? narrowInto32BitInteger(out, source, dtype, datasetKey) : out;
 }
 
 /**
@@ -164,12 +292,18 @@ class H5Loader extends ThreadableVolumeLoader {
   /** Optional RGB colour hints for each channel. */
   private readonly channelColors: ([number, number, number] | undefined)[];
 
-  /** Whether all channels should be delivered to `onData` in a single call. */
+  private readonly contiguousDataOffset?: number;
+
+  // load everything in a single call
   private syncChannels = false;
-  /** Cache of the dataset's full contents, converted to a typed array. */
   private cachedData?: TypedArray<NumberType>;
 
-  private constructor(private readonly file: H5File, private readonly datasetKey: string) {
+  private constructor(
+    private readonly file: H5File,
+    private readonly buffer: ArrayBuffer,
+    private readonly datasetKey: string,
+    maxFallbackBytes: number
+  ) {
     super();
 
     const ds = this.file.get(this.datasetKey) as H5Dataset;
@@ -184,6 +318,20 @@ class H5Loader extends ThreadableVolumeLoader {
     this.channelAxisIndex = shape.length === 4 ? 0 : -1;
     this.sourceDtype = parseJsfiveDtype(ds.dtype, this.datasetKey);
     this.dtype = renderableNumberType(this.sourceDtype);
+    const elementCount = shape.reduce((a, b) => a * b, 1);
+    const expectedBytes = elementCount * (this.sourceDtype.bits / 8);
+    this.contiguousDataOffset = getContiguousDataOffset(ds, this.sourceDtype, expectedBytes);
+
+    if (this.contiguousDataOffset === undefined) {
+      const fallbackBytes = elementCount * 8;
+      if (fallbackBytes > maxFallbackBytes) {
+        throw new VolumeLoadError(
+          `Volume is ~` + `${(fallbackBytes / 1024 ** 3).toFixed(1)} GiB and is prevented from loading to avoid OOM.
+           Increase the H5Loader's 'maxFallbackBytes or use contiguous H5.`,
+          { type: VolumeLoadErrorType.TOO_LARGE }
+        );
+      }
+    }
 
     const attrs = ds.attrs;
     const spacingAttr = attrs["spacing"];
@@ -209,7 +357,6 @@ class H5Loader extends ThreadableVolumeLoader {
         : Array.from({ length: n }, () => undefined);
   }
 
-  /** Creates a new `H5Loader` by fetching and parsing the HDF5 file at `url`. */
   static async createLoader(url: string, options: H5LoaderOptions = {}): Promise<H5Loader> {
     const remappedUrl = remapUri(url);
 
@@ -251,24 +398,19 @@ class H5Loader extends ThreadableVolumeLoader {
       );
     }
 
-    return new H5Loader(file, chosenKey);
+    return new H5Loader(file, buffer, chosenKey, options.maxFallbackBytes ?? DEFAULT_MAX_FALLBACK_BYTES);
   }
 
   private get channelCount(): number {
     return this.channelAxisIndex === -1 ? 1 : this.datasetShape[0];
   }
 
-  /** Spatial extents `[Z, Y, X]`, regardless of whether a channel axis is present. */
   private get spatialShape(): [number, number, number] {
     return this.channelAxisIndex === -1
       ? [this.datasetShape[0], this.datasetShape[1], this.datasetShape[2]]
       : [this.datasetShape[1], this.datasetShape[2], this.datasetShape[3]];
   }
 
-  /**
-   * Computes the texture atlas layout for this volume's Z slices, downsampling the X/Y tile size as needed so
-   * that the resulting atlas doesn't exceed `MAX_ATLAS_EDGE` in either dimension.
-   */
   private getAtlasLayout(): { atlasCols: number; atlasRows: number; tileX: number; tileY: number } {
     const [z, y, x] = this.spatialShape;
     const atlasDims = computePackedAtlasDims(z, x, y);
@@ -284,6 +426,41 @@ class H5Loader extends ThreadableVolumeLoader {
       this.cachedData = toTypedArray(ds.value, this.sourceDtype, this.dtype, this.datasetKey);
     }
     return this.cachedData;
+  }
+
+  /**
+   * Reads one channel, already decimated to the atlas tile size.
+   *
+   * Contiguous, unfiltered datasets are read straight out of the file buffer one slice at a time, so only the
+   * decimated result is ever allocated. Everything else goes through jsfive's Dataset.value, which materializes
+   * the whole dataset before it can be downsampled.
+   */
+  private readChannel(channel: number, ty: number, tx: number): TypedArray<NumberType> {
+    const [z, y, x] = this.spatialShape;
+
+    if (this.contiguousDataOffset !== undefined) {
+      // A 3-D dataset has no channel axis, so there is no per-channel offset to skip.
+      const channelIndex = this.channelAxisIndex === -1 ? 0 : channel;
+      return readContiguousChannel(
+        this.buffer,
+        this.contiguousDataOffset,
+        this.sourceDtype,
+        this.dtype,
+        this.datasetKey,
+        [z, y, x],
+        ty,
+        tx,
+        channelIndex
+      );
+    }
+
+    const data = this.getFullData();
+    const spatialSize = z * y * x;
+    const fullChannelData =
+      this.channelAxisIndex === -1
+        ? data
+        : (data.subarray(channel * spatialSize, (channel + 1) * spatialSize) as typeof data);
+    return downsampleXY(fullChannelData, this.dtype, z, y, x, ty, tx);
   }
 
   async loadDims(_loadSpec: LoadSpec): Promise<VolumeDims[]> {
@@ -335,7 +512,6 @@ class H5Loader extends ThreadableVolumeLoader {
       },
     };
 
-    // H5Loader always loads the full volume, so the loaded subregion is the entire unit cube.
     const adjustedLoadSpec: LoadSpec = {
       ...loadSpec,
       subregion: new Box3(new Vector3(0, 0, 0), new Vector3(1, 1, 1)),
@@ -353,9 +529,6 @@ class H5Loader extends ThreadableVolumeLoader {
   ): Promise<void> {
     onUpdateMetadata(imageInfo);
 
-    const data = this.getFullData();
-    const [z, y, x] = this.spatialShape;
-    const spatialSize = z * y * x;
     const { tileX, tileY } = this.getAtlasLayout();
 
     const channelIndices = loadSpec.channels ?? Array.from({ length: this.channelCount }, (_, i) => i);
@@ -366,11 +539,7 @@ class H5Loader extends ThreadableVolumeLoader {
     const syncRanges: [number, number][] = [];
 
     for (const ch of channelIndices) {
-      const fullChannelData =
-        this.channelAxisIndex === -1
-          ? data
-          : (data.subarray(ch * spatialSize, (ch + 1) * spatialSize) as typeof data);
-      const channelData = downsampleXY(fullChannelData, this.dtype, z, y, x, tileY, tileX);
+      const channelData = this.readChannel(ch, tileY, tileX);
       const range = getDataRange(channelData);
 
       if (this.syncChannels) {
