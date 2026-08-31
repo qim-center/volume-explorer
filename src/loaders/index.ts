@@ -3,6 +3,7 @@ import { OMEZarrLoader, type ZarrLoaderFetchOptions } from "./OmeZarrLoader.js";
 import { JsonImageInfoLoader } from "./JsonImageInfoLoader.js";
 import { RawArrayLoader, RawArrayLoaderOptions } from "./RawArrayLoader.js";
 import { TiffLoader } from "./TiffLoader.js";
+import { H5Loader, type H5LoaderOptions } from "./H5Loader.js";
 import VolumeCache from "../VolumeCache.js";
 import SubscribableRequestQueue from "../utils/SubscribableRequestQueue.js";
 import { getFileTypeHintCandidates } from "../utils/url_utils.js";
@@ -13,6 +14,7 @@ export const enum VolumeFileFormat {
   ZARR = "zarr",
   JSON = "json",
   TIFF = "tiff",
+  H5 = "h5",
   DATA = "data",
 }
 
@@ -24,6 +26,7 @@ export type CreateLoaderOptions = {
   scene?: number;
   fetchOptions?: ZarrLoaderFetchOptions;
   rawArrayOptions?: RawArrayLoaderOptions;
+  h5Options?: H5LoaderOptions;
 };
 
 export function pathToFileType(path: string): VolumeFileFormat {
@@ -32,6 +35,8 @@ export function pathToFileType(path: string): VolumeFileFormat {
     return VolumeFileFormat.JSON;
   } else if (candidates.some((candidate) => candidate.endsWith(".tif") || candidate.endsWith(".tiff"))) {
     return VolumeFileFormat.TIFF;
+  } else if (candidates.some((candidate) => candidate.endsWith(".h5") || candidate.endsWith(".hdf5"))) {
+    return VolumeFileFormat.H5;
   } else if (
     candidates.some(
       (candidate) =>
@@ -64,6 +69,8 @@ export async function createVolumeLoader(
       return new JsonImageInfoLoader(path, options?.cache);
     case VolumeFileFormat.TIFF:
       return new TiffLoader(pathArrayForTiffLoader);
+    case VolumeFileFormat.H5:
+      return await H5Loader.createLoader(pathString, options?.h5Options);
     case VolumeFileFormat.DATA:
       if (!options?.rawArrayOptions) {
         throw new Error("Must provide RawArrayOptions for RawArrayLoader");
