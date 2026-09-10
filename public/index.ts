@@ -45,13 +45,19 @@ import { densitySliderToView3D, gammaSliderToImageValues } from "./app/utils/mat
 import { inferVolumeFileFormat } from "./app/utils/source";
 
 const CACHE_MAX_SIZE = 1_000_000_000;
-const CONCURRENCY_LIMIT = 8;
+const DEFAULT_CONCURRENCY_LIMIT = 8;
 const PREFETCH_CONCURRENCY_LIMIT = 3;
 const PREFETCH_DISTANCE: [number, number, number, number] = [5, 5, 5, 5];
 const MAX_PREFETCH_CHUNKS = 25;
 const PLAYBACK_INTERVAL = 80;
 
 const TEST_DATA = DEFAULT_TEST_DATA as Record<string, TestDataSpec>;
+
+function getMaxActiveRequestsFromUrl(): number {
+  const raw = new URLSearchParams(window.location.search).get("maxActiveRequests");
+  const value = raw ? Number(raw) : NaN;
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_CONCURRENCY_LIMIT;
+}
 
 let view3D: View3d;
 
@@ -65,9 +71,11 @@ function setVolumeLoading(isLoading: boolean) {
   inlineIndicator?.setAttribute("aria-hidden", isLoading ? "false" : "true");
 }
 
-const loaderContext = new VolumeLoaderContext(CACHE_MAX_SIZE, CONCURRENCY_LIMIT, PREFETCH_CONCURRENCY_LIMIT);
-
 const myState = createInitialState();
+
+const MAX_ACTIVE_REQUESTS = getMaxActiveRequestsFromUrl();
+
+const loaderContext = new VolumeLoaderContext(CACHE_MAX_SIZE, MAX_ACTIVE_REQUESTS, PREFETCH_CONCURRENCY_LIMIT);
 
 const getNumberOfTimesteps = (): number => myState.totalFrames || myState.volume.imageInfo.times;
 
