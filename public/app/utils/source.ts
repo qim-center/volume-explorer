@@ -21,5 +21,8 @@ export function inferVolumeFileFormat(sourceUrl: string): VolumeFileFormat | nul
   ) {
     return VolumeFileFormat.TIFF;
   }
+  if (candidates.some((candidate) => candidate.endsWith(".h5") || candidate.endsWith(".hdf5"))) {
+    return VolumeFileFormat.H5;
+  }
   return null;
 }
