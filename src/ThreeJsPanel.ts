@@ -409,12 +409,10 @@ export class ThreeJsPanel {
 
     // Orthographic scale bar
     const orthoScaleBarStyle: Partial<CSSStyleDeclaration> = {
-      border: "1px solid white",
+      border: "1px solid",
       borderTop: "none",
       height: "10px",
       display: "none",
-      color: "white",
-      mixBlendMode: "difference",
       fontSize: "14px",
       textAlign: "right",
       lineHeight: "0",
@@ -431,7 +429,6 @@ export class ThreeJsPanel {
       width: "75px",
       textAlign: "center",
       display: "none",
-      color: "white",
     };
     Object.assign(this.perspectiveScaleBarElement.style, perspectiveScaleBarStyle);
     this.scaleBarContainerElement.appendChild(this.perspectiveScaleBarElement);
@@ -650,6 +647,10 @@ export class ThreeJsPanel {
 
   setClearColor(color: Color, alpha: number): void {
     this.renderer.setClearColor(color, alpha);
+    const scaleBarColor = (color.r + color.g + color.b) / 3 > 0.5 ? "black" : "white";
+    this.orthoScaleBarElement.style.color = scaleBarColor;
+    this.perspectiveScaleBarElement.style.color = scaleBarColor;
+    this.perspectiveScaleBarElement.querySelector("path[stroke-dasharray]")?.setAttribute("stroke", scaleBarColor);
   }
 
   getWidth(): number {
