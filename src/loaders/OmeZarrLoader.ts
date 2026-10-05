@@ -17,6 +17,7 @@ import {
 import {
   composeSubregion,
   computePackedAtlasDims,
+  MAX_ATLAS_EDGE,
   convertSubregionToPixels,
   pickLevelToLoad,
   unitNameToSymbol,
@@ -354,7 +355,8 @@ class OMEZarrLoader extends ThreadableVolumeLoader {
     );
     const pxSizeLv = pxDimsLv.getSize(new Vector3());
 
-    const atlasTileDims = computePackedAtlasDims(pxSizeLv.z, pxSizeLv.x, pxSizeLv.y);
+    const maxAtlasEdge = loadSpec.maxAtlasEdge ?? MAX_ATLAS_EDGE;
+    const atlasTileDims = computePackedAtlasDims(pxSizeLv.z, pxSizeLv.x, pxSizeLv.y, maxAtlasEdge);
 
     // Channel names is the other place where we have to check every source
     // Track which channel names we've seen so far, so that we can rename them to avoid name collisions
@@ -506,7 +508,8 @@ class OMEZarrLoader extends ThreadableVolumeLoader {
 
     // Derive other image info properties from subregion and level to load
     const subregionSize = regionPx.getSize(new Vector3());
-    const atlasTileDims = computePackedAtlasDims(subregionSize.z, subregionSize.x, subregionSize.y);
+    const maxAtlasEdge = loadSpec.maxAtlasEdge ?? MAX_ATLAS_EDGE;
+    const atlasTileDims = computePackedAtlasDims(subregionSize.z, subregionSize.x, subregionSize.y, maxAtlasEdge);
 
     return {
       ...imageInfo,
