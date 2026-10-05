@@ -233,6 +233,8 @@ button { font-family: inherit; cursor: pointer; }
   font: 13px var(--font); color: var(--ink); text-align: left; }
 .select__option:hover, .select__option:focus-visible { background: var(--surface-muted); }
 .select__option[aria-selected="true"] { font-weight: 500; }
+.select__option:disabled { color: var(--label); cursor: not-allowed; }
+.select__option:disabled:hover { background: none; }
 .select__options-anchor { position: relative; display: inline-flex; align-items: center; gap: 10px; }
 
 /* ---------- export menu (popover under the Export button) ---------- */

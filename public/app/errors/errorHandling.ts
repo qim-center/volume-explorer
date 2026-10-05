@@ -22,13 +22,3 @@ export function getSourceLoadErrorMessage(error: unknown): string {
   }
   return "Failed to load data from URL";
 }
-
-export async function revertScaleToAuto(
-  selectElement: HTMLSelectElement | null,
-  applyScaleLevel: () => Promise<void>
-): Promise<void> {
-  if (selectElement) {
-    selectElement.value = "auto";
-  }
-  await applyScaleLevel();
-}

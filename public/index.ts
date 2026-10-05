@@ -116,7 +116,10 @@ const cropSliceManager = createCropSliceManager({
   state: myState,
   getView3D: () => view3D,
   goToZSlice,
-  onCropRegionApplied: () => syncCropHandlesFromState(),
+  onCropRegionApplied: () => {
+    syncCropHandlesFromState();
+    updateOmeZarrScaleSelect(myState.volume);
+  },
 });
 
 function applyCropRegionFromState() {
@@ -138,10 +141,6 @@ function syncCropHandlesFromState() {
   if (view3D) {
     view3D.setCropHandlesRegion(getCropRegionFromState());
   }
-}
-
-function getEffectiveAxisLoadBounds(axis: "x" | "y" | "z") {
-  return cropSliceManager.getEffectiveAxisLoadBounds(axis);
 }
 
 function remapSliceIndicesForRescaledVolume(volume: Volume) {
@@ -703,7 +702,6 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   updateSliceSelectorUI();
   applyCropRegionFromState();
 
-  updateOmeZarrScaleSelect(v);
   view3D.redraw();
 }
 
@@ -745,7 +743,6 @@ function onVolumeCreated(name: string, volume: Volume) {
   syncCropInputsFromState();
   applyCropRegionFromState();
   showChannelUI(myState.volume);
-  updateOmeZarrScaleSelect(myState.volume);
 }
 
 function setSyncMultichannelLoading(sync: boolean) {
@@ -932,46 +929,9 @@ function main() {
 
   const setScaleError = (warning?: string) => setUiNote(warning);
 
-  const getMaxTextureEdge = (): number => {
-    const probeCanvas = document.createElement("canvas");
-    const gl = probeCanvas.getContext("webgl2") || probeCanvas.getContext("webgl");
-    if (!gl) {
-      return 4096;
-    }
-    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    return Number.isFinite(maxTextureSize) && maxTextureSize > 0 ? maxTextureSize : 4096;
-  };
-
-  const maxTextureEdge = getMaxTextureEdge();
-
-  const canLevelFitInAtlas = (level: number): boolean => {
-    const dims = myState.volume.imageInfo.imageInfo.multiscaleLevelDims[level];
-    if (!dims) {
-      return true;
-    }
-
-    const xLoadBounds = getEffectiveAxisLoadBounds("x");
-    const yLoadBounds = getEffectiveAxisLoadBounds("y");
-    const zLoadBounds = getEffectiveAxisLoadBounds("z");
-
-    const cropX = Math.max(1 / Math.max(1, dims.shape[4]), xLoadBounds.max - xLoadBounds.min);
-    const cropY = Math.max(1 / Math.max(1, dims.shape[3]), yLoadBounds.max - yLoadBounds.min);
-    const cropZ = Math.max(1 / Math.max(1, dims.shape[2]), zLoadBounds.max - zLoadBounds.min);
-
-    const x = Math.max(1, Math.ceil(dims.shape[4] * cropX));
-    const y = Math.max(1, Math.ceil(dims.shape[3] * cropY));
-    const z = Math.max(1, Math.ceil(dims.shape[2] * cropZ));
-    const xtiles = Math.floor(maxTextureEdge / x);
-    const ytiles = Math.floor(maxTextureEdge / y);
-    return xtiles > 0 && ytiles > 0 && z <= xtiles * ytiles;
-  };
-
+  // levels that don't fit are disabled in the dropdown, so any level picked here can be loaded
   const applyScaleLevel = async (level?: number): Promise<void> => {
-    await myState.volume.updateRequiredData({
-      useExplicitLevel: level !== undefined,
-      multiscaleLevel: level,
-      maxAtlasEdge: maxTextureEdge,
-    });
+    await myState.volume.updateRequiredData({ useExplicitLevel: level !== undefined, multiscaleLevel: level });
   };
 
   if (ui.omeZarrScaleSelect && ui.omeZarrScaleOptions) {
@@ -980,7 +940,6 @@ function main() {
       optionsList: ui.omeZarrScaleOptions,
       getVolume: () => myState.volume,
       applyScaleLevel,
-      canLevelFitInAtlas,
       onShowError: setScaleError,
     });
   }

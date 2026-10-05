@@ -5,10 +5,9 @@ import Histogram from "./Histogram.js";
 import { Lut } from "./Lut.js";
 import { getColorByChannelIndex } from "./constants/colors.js";
 import { type IVolumeLoader, LoadSpec, type PerChannelCallback } from "./loaders/IVolumeLoader.js";
-import { MAX_ATLAS_EDGE, pickLevelToLoadUnscaled, type PickLevelResult } from "./loaders/VolumeLoaderUtils.js";
+import { getLoadableLevels, MAX_ATLAS_EDGE, pickLevelToLoad } from "./loaders/VolumeLoaderUtils.js";
 import type { NumberType, TypedArray } from "./types.js";
 import { type ImageInfo, CImageInfo, defaultImageInfo } from "./ImageInfo.js";
-import type { VolumeDims } from "./VolumeDims.js";
 
 interface VolumeDataObserver {
   onVolumeLoadStart: (vol: Volume) => void;
@@ -71,6 +70,8 @@ export default class Volume {
 
   private volumeDataObservers: VolumeDataObserver[];
   private loaded: boolean;
+  private levelDimsZYX: [number, number, number][];
+  private requestedLevel?: number;
 
   constructor(imageInfo: ImageInfo = defaultImageInfo(), loadSpec: LoadSpec = new LoadSpec(), loader?: IVolumeLoader) {
     this.loaded = false;
@@ -91,6 +92,9 @@ export default class Volume {
       subregion: this.loadSpec.subregion.clone(),
     };
     this.loader = loader;
+    this.levelDimsZYX = this.imageInfo.imageInfo.multiscaleLevelDims.map(
+      ({ shape }): [number, number, number] => [shape[2], shape[3], shape[4]]
+    );
     // imageMetadata to be filled in by Volume Loaders
     this.imageMetadata = {};
 
@@ -151,69 +155,50 @@ export default class Volume {
   /** Returns `true` iff differences between `loadSpec` and `loadSpecRequired` indicate new data *must* be loaded. */
   private mustLoadNewData(): boolean {
     return (
-      this.loadSpec.useExplicitLevel !== this.loadSpecRequired.useExplicitLevel || // explicit vs automatic level changed
       this.loadSpec.time !== this.loadSpecRequired.time || // time point changed
       !this.loadSpec.subregion.containsBox(this.loadSpecRequired.subregion) || // new subregion not contained in old
       this.loadSpecRequired.channels.some((channel) => !this.loadSpec.channels.includes(channel)) // new channel(s)
     );
   }
 
-  /**
-   * Returns `true` iff differences between `loadSpec` and `loadSpecRequired` indicate a new load *may* get a
-   * different scale level than is currently loaded.
-   *
-   * This checks for changes in properties that *can*, but do not *always*, change the scale level the loader picks.
-   * For example, a smaller `subregion` *may* mean a higher scale level will fit within memory constraints, or it may
-   * not. A higher `scaleLevelBias` *may* nudge the volume into a higher scale level, or we may already be at the max
-   * imposed by `multiscaleLevel`.
-   */
-  private mayLoadNewScaleLevel(): boolean {
-    return (
-      !this.loadSpec.subregion.equals(this.loadSpecRequired.subregion) ||
-      this.loadSpecRequired.maxAtlasEdge !== this.loadSpec.maxAtlasEdge ||
-      this.loadSpecRequired.multiscaleLevel !== this.loadSpec.multiscaleLevel ||
-      this.loadSpecRequired.scaleLevelBias !== this.loadSpec.scaleLevelBias
-    );
+  private pickRequiredLevel(): number {
+    const { level, explicitLevelTooLarge } = pickLevelToLoad(this.loadSpecRequired, this.levelDimsZYX);
+    if (explicitLevelTooLarge) {
+      this.loadSpecRequired.useExplicitLevel = false;
+      this.loadSpecRequired.multiscaleLevel = 0;
+      const error = new Error("Selected scale level is too large for this device. Reverted to Auto.");
+      this.volumeDataObservers.forEach((observer) => observer.onVolumeLoadError(this, error));
+    }
+    return level;
+  }
+
+  // for each scale level returns if it fits within `maxAtlasEdge` for the current subregion
+  getLoadableLevels(): boolean[] {
+    const { maxAtlasEdge, subregion } = this.loadSpecRequired;
+    return getLoadableLevels(this.levelDimsZYX, maxAtlasEdge, subregion);
+  }
+
+  hasLoadStarted(): boolean {
+    return this.requestedLevel !== undefined;
+  }
+
+  load(onChannelLoaded?: PerChannelCallback, required?: Partial<LoadSpec>): Promise<void> {
+    if (required) {
+      this.loadSpecRequired = { ...this.loadSpecRequired, ...required };
+    }
+    return this.loadNewData(this.pickRequiredLevel(), onChannelLoaded);
   }
 
   /** Call on any state update that may require new data to be loaded (subregion, enabled channels, time, etc.) */
   async updateRequiredData(required: Partial<LoadSpec>, onChannelLoaded?: PerChannelCallback): Promise<void> {
     this.loadSpecRequired = { ...this.loadSpecRequired, ...required };
-    let shouldReload = this.mustLoadNewData();
+    const level = this.pickRequiredLevel();
 
-    if (shouldReload || this.mayLoadNewScaleLevel()) {
-      const dims = await this.loadScaleLevelDims();
-      if (dims) {
-        const dimsZYX = dims.map(({ shape }): [number, number, number] => [shape[2], shape[3], shape[4]]);
-        const result: PickLevelResult = pickLevelToLoadUnscaled(this.loadSpecRequired, dimsZYX);
-
-        if (result.explicitLevelTooLarge) {
-          this.loadSpecRequired.useExplicitLevel = false;
-          this.volumeDataObservers.forEach((observer) =>
-            observer.onVolumeLoadError(
-              this,
-              new Error("Selected scale level is too large for this device. Reverted to Auto.")
-            )
-          );
-        }
-
-        if (!shouldReload) {
-          shouldReload = this.imageInfo.multiscaleLevel !== result.level;
-        }
-      }
+    if (this.requestedLevel === undefined) {
+      return;
     }
-
-    if (shouldReload) {
-      await this.loadNewData(onChannelLoaded);
-    }
-  }
-
-  private async loadScaleLevelDims(): Promise<VolumeDims[] | undefined> {
-    try {
-      return await this.loader?.loadDims(this.loadSpecRequired);
-    } catch (e) {
-      this.volumeDataObservers.forEach((observer) => observer.onVolumeLoadError(this, e));
-      return undefined;
+    if (level !== this.requestedLevel || this.mustLoadNewData()) {
+      await this.loadNewData(level, onChannelLoaded);
     }
   }
 
@@ -221,7 +206,8 @@ export default class Volume {
    * Loads new data as specified in `this.loadSpecRequired`. Clones `loadSpecRequired` into `loadSpec` to indicate
    * that the data that *must* be loaded is now the data that *has* been loaded.
    */
-  private async loadNewData(onChannelLoaded?: PerChannelCallback): Promise<void> {
+  private async loadNewData(level: number, onChannelLoaded?: PerChannelCallback): Promise<void> {
+    this.requestedLevel = level;
     this.setUnloaded();
     this.volumeDataObservers.forEach((observer) => observer.onVolumeLoadStart(this));
     this.loadSpec = {

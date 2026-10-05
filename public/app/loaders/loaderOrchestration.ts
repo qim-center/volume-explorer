@@ -53,6 +53,15 @@ function createTestVolume(dtype: NumberType): RawArrayLoaderOptions {
     },
   };
 }
+function getMaxTextureEdge(): number {
+  const probeCanvas = document.createElement("canvas");
+  const gl = probeCanvas.getContext("webgl2") || probeCanvas.getContext("webgl");
+  if (!gl) {
+    return 4096;
+  }
+  const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  return Number.isFinite(maxTextureSize) && maxTextureSize > 0 ? maxTextureSize : 4096;
+}
 
 export function createLoaderOrchestration(options: LoaderOrchestrationOptions) {
   const {
@@ -101,15 +110,15 @@ export function createLoaderOrchestration(options: LoaderOrchestrationOptions) {
     return [result];
   };
 
+  const maxAtlasEdge = getMaxTextureEdge();
+
   const loadVolume = async (name: string, loadSpec: LoadSpec, loader: IVolumeLoader): Promise<void> => {
-    const fullDims = await loader.loadDims(loadSpec);
-    console.log(fullDims);
-
+    loadSpec.maxAtlasEdge = maxAtlasEdge;
     const volume = await loader.createVolume(loadSpec, onChannelDataArrived);
-    onVolumeCreated(name, volume);
-    loader.loadVolumeData(volume);
 
+    onVolumeCreated(name, volume);
     goToZSlice(Math.floor(volume.imageInfo.subregionSize.z / 2));
+    volume.load().catch(() => undefined);
   };
 
   const loadTestData = async (name: string, testdata: TestDataSpec) => {
