@@ -192,6 +192,12 @@ export function pickLevelToLoad(loadSpec: LoadSpec, spatialDimsZYX: ZYX[]): Pick
   return pickLevelToLoadUnscaled(loadSpec, scaledDims);
 }
 
+export function getLoadableLevels(spatialDimsZYX: ZYX[], maxAtlasEdge: number, subregion: Box3): boolean[] {
+  return scaleMultipleDimsToSubregion(subregion, spatialDimsZYX).map(
+    (dims) => spatialDimsZYX.length <= 1 || doesSpatialDimensionFitInAtlas(dims, maxAtlasEdge)
+  );
+}
+
 /** Given the size of a volume in pixels, convert a `Box3` in the 0-1 range to pixels */
 export function convertSubregionToPixels(region: Box3, size: Vector3): Box3 {
   const min = region.min.clone().multiply(size).floor();

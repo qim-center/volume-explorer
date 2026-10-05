@@ -5,7 +5,6 @@ interface SetupScaleSelectOptions {
   optionsList: HTMLUListElement;
   getVolume: () => Volume;
   applyScaleLevel: (level?: number) => Promise<void>;
-  canLevelFitInAtlas: (level: number) => boolean;
   onShowError: (message?: string) => void;
 }
 
@@ -16,7 +15,7 @@ export interface ScaleSelectApi {
 }
 
 export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectApi {
-  const { button, optionsList, getVolume, applyScaleLevel, canLevelFitInAtlas, onShowError } = options;
+  const { button, optionsList, getVolume, applyScaleLevel, onShowError } = options;
 
   const isOpen = (): boolean => !optionsList.hidden;
 
@@ -40,7 +39,7 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
   const refreshLabel = (volume: Volume): void => {
     const totalLevels = volume.imageInfo.numMultiscaleLevels;
     const currentLevel = volume.imageInfo.multiscaleLevel;
-    const explicit = volume.loadSpec.useExplicitLevel;
+    const explicit = volume.loadSpecRequired.useExplicitLevel;
 
     let text = "Auto";
     if (totalLevels > 1) {
@@ -54,15 +53,15 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
     optionsList.innerHTML = "";
 
     const totalLevels = volume.imageInfo.numMultiscaleLevels;
-    const currentLevel = volume.imageInfo.multiscaleLevel;
-    const explicit = volume.loadSpec.useExplicitLevel;
+    const { useExplicitLevel, multiscaleLevel } = volume.loadSpecRequired;
 
-    const makeOption = (value: string, label: string): HTMLButtonElement => {
+    const makeOption = (value: string, label: string, disabled = false): HTMLButtonElement => {
       const option = document.createElement("button");
       option.type = "button";
       option.className = "select__option";
       option.dataset.value = value;
       option.textContent = label;
+      option.disabled = disabled;
       option.addEventListener("click", () => {
         close();
         void select(value);
@@ -72,51 +71,29 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
     };
 
     makeOption("auto", "Auto");
+    const loadableLevels = volume.getLoadableLevels();
     for (let i = 0; i < totalLevels; i++) {
-      makeOption(String(i), `Level ${i}`);
+      makeOption(String(i), loadableLevels[i] ? `Level ${i}` : `Level ${i} (too large)`, !loadableLevels[i]);
     }
 
-    markSelection(explicit ? String(currentLevel) : "auto");
+    markSelection(useExplicitLevel ? String(Math.min(multiscaleLevel ?? 0, totalLevels - 1)) : "auto");
     refreshLabel(volume);
   };
 
+  // levels that don't fit are disabled in the dropdown, so any level picked here can be loaded
   const select = async (value: string): Promise<void> => {
     const volume = getVolume();
-    if (!volume) {
+    const level = value === "auto" ? undefined : Number(value);
+    if (!volume || Number.isNaN(level)) {
       return;
     }
 
     onShowError();
-
-    if (value === "auto") {
-      try {
-        await applyScaleLevel();
-      } catch {
-        onShowError("Selected scale level is too large for this device. Reverted to Auto.");
-      }
-      return;
-    }
-
-    const level = Number(value);
-    if (Number.isNaN(level)) {
-      return;
-    }
-
-    if (!canLevelFitInAtlas(level)) {
-      onShowError("Selected scale level is too large for this device. Reverted to Auto.");
-      markSelection("auto");
-      refreshLabel(volume);
-      await applyScaleLevel();
-      return;
-    }
-
+    markSelection(value);
     try {
       await applyScaleLevel(level);
-    } catch {
-      onShowError("Selected scale level is too large for this device. Reverted to Auto.");
-      markSelection("auto");
-      refreshLabel(volume);
-      await applyScaleLevel();
+    } catch (error) {
+      console.error(error);
     }
   };
 
