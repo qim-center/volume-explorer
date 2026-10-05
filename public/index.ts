@@ -25,7 +25,6 @@ import {
 import { createCropSliceManager } from "./app/crop/cropSliceManager";
 import {
   getSourceLoadErrorMessage,
-  revertScaleToAuto,
   SCALE_TOO_LARGE_MESSAGE,
   setParagraphWarning,
 } from "./app/errors/errorHandling";
@@ -86,7 +85,10 @@ const cropSliceManager = createCropSliceManager({
   state: myState,
   getView3D: () => view3D,
   goToZSlice,
-  onCropRegionApplied: () => syncCropHandlesFromState(),
+  onCropRegionApplied: () => {
+    syncCropHandlesFromState();
+    updateOmeZarrScaleSelect(myState.volume);
+  },
 });
 
 function applyCropRegionFromState() {
@@ -108,10 +110,6 @@ function syncCropHandlesFromState() {
   if (view3D) {
     view3D.setCropHandlesRegion(getCropRegionFromState());
   }
-}
-
-function getEffectiveAxisLoadBounds(axis: "x" | "y" | "z") {
-  return cropSliceManager.getEffectiveAxisLoadBounds(axis);
 }
 
 function remapSliceIndicesForRescaledVolume(volume: Volume) {
@@ -303,15 +301,17 @@ function updateOmeZarrScaleSelect(volume: Volume) {
   autoOption.textContent = "Auto";
   selectEl.appendChild(autoOption);
 
+  const loadableLevels = volume.getLoadableLevels();
   for (let i = 0; i < totalLevels; i++) {
     const option = document.createElement("option");
     option.value = String(i);
-    option.textContent = `Level ${i}`;
+    option.disabled = !loadableLevels[i];
+    option.textContent = loadableLevels[i] ? `Level ${i}` : `Level ${i} (too large)`;
     selectEl.appendChild(option);
   }
 
-  if (volume.loadSpec.useExplicitLevel) {
-    selectEl.value = String(currentLevel);
+  if (volume.loadSpecRequired.useExplicitLevel) {
+    selectEl.value = String(Math.min(volume.loadSpecRequired.multiscaleLevel, totalLevels - 1));
   } else {
     selectEl.value = "auto";
   }
@@ -702,7 +702,6 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   updateSliceSelectorUI();
   applyCropRegionFromState();
 
-  updateOmeZarrScaleSelect(v);
   view3D.redraw();
 }
 
@@ -744,7 +743,6 @@ function onVolumeCreated(name: string, volume: Volume) {
   syncCropInputsFromState();
   applyCropRegionFromState();
   showChannelUI(myState.volume);
-  updateOmeZarrScaleSelect(myState.volume);
 }
 
 function setSyncMultichannelLoading(sync: boolean) {
@@ -932,85 +930,20 @@ function main() {
   const scaleError = ui.scaleError;
   const setScaleError = (warning?: string) => setParagraphWarning(scaleError, warning);
 
-  const getMaxTextureEdge = (): number => {
-    const probeCanvas = document.createElement("canvas");
-    const gl = probeCanvas.getContext("webgl2") || probeCanvas.getContext("webgl");
-    if (!gl) {
-      return 4096;
-    }
-    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    return Number.isFinite(maxTextureSize) && maxTextureSize > 0 ? maxTextureSize : 4096;
-  };
-
-  const maxTextureEdge = getMaxTextureEdge();
-
-  const canLevelFitInAtlas = (level: number): boolean => {
-    const dims = myState.volume.imageInfo.imageInfo.multiscaleLevelDims[level];
-    if (!dims) {
-      return true;
-    }
-
-    const xLoadBounds = getEffectiveAxisLoadBounds("x");
-    const yLoadBounds = getEffectiveAxisLoadBounds("y");
-    const zLoadBounds = getEffectiveAxisLoadBounds("z");
-
-    const cropX = Math.max(1 / Math.max(1, dims.shape[4]), xLoadBounds.max - xLoadBounds.min);
-    const cropY = Math.max(1 / Math.max(1, dims.shape[3]), yLoadBounds.max - yLoadBounds.min);
-    const cropZ = Math.max(1 / Math.max(1, dims.shape[2]), zLoadBounds.max - zLoadBounds.min);
-
-    const x = Math.max(1, Math.ceil(dims.shape[4] * cropX));
-    const y = Math.max(1, Math.ceil(dims.shape[3] * cropY));
-    const z = Math.max(1, Math.ceil(dims.shape[2] * cropZ));
-    const xtiles = Math.floor(maxTextureEdge / x);
-    const ytiles = Math.floor(maxTextureEdge / y);
-    return xtiles > 0 && ytiles > 0 && z <= xtiles * ytiles;
-  };
-
-  const applyScaleLevel = async (level?: number): Promise<void> => {
-    await myState.volume.updateRequiredData({
-      useExplicitLevel: level !== undefined,
-      multiscaleLevel: level,
-      maxAtlasEdge: maxTextureEdge,
-    });
-  };
-
+  // levels that don't fit are disabled in the dropdown, so any level picked here can be loaded
   const omeZarrScaleSelect = ui.omeZarrScaleSelect;
   omeZarrScaleSelect?.addEventListener("change", async () => {
     const value = omeZarrScaleSelect.value;
-    if (!myState.volume) {
+    const level = value === "auto" ? undefined : Number(value);
+    if (!myState.volume || Number.isNaN(level)) {
       return;
     }
 
     setScaleError();
-
-    if (value === "auto") {
-      try {
-        await applyScaleLevel();
-      } catch (error) {
-        setScaleError(SCALE_TOO_LARGE_MESSAGE);
-      }
-    } else {
-      const level = Number(value);
-      if (!Number.isNaN(level)) {
-        if (!canLevelFitInAtlas(level)) {
-          setScaleError(SCALE_TOO_LARGE_MESSAGE);
-          try {
-            await revertScaleToAuto(omeZarrScaleSelect, applyScaleLevel);
-          } catch {
-          }
-          return;
-        }
-
-        try {
-          await applyScaleLevel(level);
-        } catch (error) {
-          setScaleError(SCALE_TOO_LARGE_MESSAGE);
-          try {
-            await revertScaleToAuto(omeZarrScaleSelect, applyScaleLevel);
-          } catch {
-          }
-        }
-      }
+    try {
+      await myState.volume.updateRequiredData({ useExplicitLevel: level !== undefined, multiscaleLevel: level });
+    } catch (error) {
+    console.error(error);
     }
   });
 
