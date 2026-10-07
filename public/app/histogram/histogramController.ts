@@ -1,7 +1,7 @@
 import { Color } from "three";
 import { Lut, View3d, Volume } from "../../../src";
 import { HistogramSelection } from "../state/stateService";
-import { histogramBinFromX } from "../utils/math";
+import { formatHistogramValue, histogramBinFromX } from "../utils/math";
 import { colormaps } from "../../colorizer";
 
 interface HistogramControllerOptions {
@@ -85,6 +85,11 @@ export function createHistogramController(options: HistogramControllerOptions) {
     }
 
     const barWidth = w / bins.length;
+
+    const valueMin = hist.getValueFromBinIndex(0);
+    const valueMax = hist.getValueFromBinIndex(bins.length);
+    const valueMaxAbs = Math.max(Math.abs(valueMin), Math.abs(valueMax));
+    const binSize = (valueMax - valueMin) / bins.length;
 
     const colormapName = getColormapName?.();
     const colormap = colormapName ? colormaps[colormapName] : null;
@@ -180,7 +185,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
       ctx.font = labelFontSize + "px " + labelFontFamily;
 
       const drawHandleLabel = (binIndex: number, xHandle: number) => {
-        const labelText = `${Math.round(hist.getValueFromBinIndex(binIndex))}`;
+        const labelText = formatHistogramValue(hist.getValueFromBinIndex(binIndex), binSize, valueMaxAbs);
         const textW = ctx.measureText(labelText).width;
         const boxW = textW + labelPadH * 2;
         const boxH = labelFontSize + labelPadV * 2;
@@ -215,6 +220,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
     ctx.stroke();
 
     const xTicks = 5;
+    const tickStep = (binSize * (bins.length - 1)) / xTicks;
     ctx.fillStyle = "#8a8a8a";
     ctx.font = "11px sans-serif";
     ctx.textAlign = "center";
@@ -227,7 +233,8 @@ export function createHistogramController(options: HistogramControllerOptions) {
       ctx.stroke();
       const binIndex = (i / xTicks) * (bins.length - 1);
       const labelValue = hist.getValueFromBinIndex(binIndex);
-      ctx.fillText(`${Math.round(labelValue)}`, x, plotH + 2);
+      ctx.textAlign = i === 0 ? "left" : i === xTicks ? "right" : "center";
+      ctx.fillText(formatHistogramValue(labelValue, tickStep, valueMaxAbs), x, plotH + 2);
     }
   };
 
