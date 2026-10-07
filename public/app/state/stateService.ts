@@ -126,6 +126,7 @@ export function createInitialState(): State {
     colormap: "plasma",
     colormapMin: 0,
     colormapMax: 255,
+    colormapRangeMapped: false,
     colormapInverted: false,
     featureMin: 0.0,
     featureMax: 1.0,

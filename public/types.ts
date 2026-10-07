@@ -98,6 +98,7 @@ export interface State {
   colormap: string;
   colormapMin: number;
   colormapMax: number;
+  colormapRangeMapped: boolean;
   colormapInverted: boolean;
   feature: string;
   featureMin: number;

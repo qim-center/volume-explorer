@@ -36,8 +36,58 @@ export function gammaSliderToImageValues(sliderValues: [number, number, number])
 export function histogramBinFromX(x: number, canvas: HTMLCanvasElement, binCount: number): number {
   const displayWidth = canvas.getBoundingClientRect().width;
   const t = x / displayWidth;
-  const b = Math.floor(t * binCount);
-  return Math.max(0, Math.min(binCount - 1, b));
+  // fractional, so the handles follow the cursor instead of snapping to bins
+  return Math.max(0, Math.min(binCount, t * binCount));
+}
+
+export function formatColormapRangeValue(value: number): string {
+  if (!Number.isFinite(value)) {
+    return `${value}`;
+  }
+  const abs = Math.abs(value);
+  if (abs === 0 || (abs >= 1e-3 && abs < 1e6)) {
+    // Number() drops trailing zeros
+    return `${Number(value.toFixed(3))}`;
+  }
+  const [significand, exponent] = value.toExponential(3).split("e");
+  return `${Number(significand)}e${exponent.replace("+", "")}`;
+}
+
+const LUT_MAX = 255;
+
+interface HistogramDataRange {
+  getDataMin(): number;
+  getDataMax(): number;
+  getValueFromBinIndex(binIndex: number): number;
+  findFractionalBinOfValue(value: number): number;
+}
+
+export function histogramBinToLut(histogram: HistogramDataRange, binIndex: number): number {
+  const min = histogram.getDataMin();
+  const range = histogram.getDataMax() - min;
+  if (!(range > 0)) {
+    return 0;
+  }
+  const lut = ((histogram.getValueFromBinIndex(binIndex) - min) / range) * LUT_MAX;
+  return Math.max(0, Math.min(LUT_MAX, lut));
+}
+
+export function lutToHistogramValue(histogram: HistogramDataRange, lut: number): number {
+  const min = histogram.getDataMin();
+  return min + (lut / LUT_MAX) * (histogram.getDataMax() - min);
+}
+
+export function histogramValueToLut(histogram: HistogramDataRange, value: number): number {
+  const min = histogram.getDataMin();
+  const range = histogram.getDataMax() - min;
+  if (!(range > 0)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(LUT_MAX, ((value - min) / range) * LUT_MAX));
+}
+
+export function lutToHistogramBin(histogram: HistogramDataRange, lut: number): number {
+  return histogram.findFractionalBinOfValue(lutToHistogramValue(histogram, lut));
 }
 
 const HISTOGRAM_LABEL_MAX_DECIMALS = 3;

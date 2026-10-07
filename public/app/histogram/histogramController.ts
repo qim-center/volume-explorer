@@ -1,7 +1,7 @@
 import { Color } from "three";
 import { Lut, View3d, Volume } from "../../../src";
 import { HistogramSelection } from "../state/stateService";
-import { formatHistogramValue, histogramBinFromX } from "../utils/math";
+import { formatHistogramValue, histogramBinFromX, histogramBinToLut, lutToHistogramBin } from "../utils/math";
 
 interface HistogramControllerOptions {
   canvas: HTMLCanvasElement | null;
@@ -76,12 +76,21 @@ export function createHistogramController(options: HistogramControllerOptions) {
   };
 
   const updateTags = (hist: any, minBin: number, maxBin: number, binCount: number): void => {
+    const valueMin = hist.getValueFromBinIndex(0);
+    const valueMax = hist.getValueFromBinIndex(binCount);
+    const valueMaxAbs = Math.max(Math.abs(valueMin), Math.abs(valueMax));
+    // the handles move per display pixel, so that is the precision worth showing
+    const displayWidth = canvas?.getBoundingClientRect().width ?? 0;
+    const handleStep = (valueMax - valueMin) / (displayWidth > 0 ? displayWidth : binCount);
+    const formatTag = (binIndex: number): string =>
+      formatHistogramValue(hist.getValueFromBinIndex(binIndex), handleStep, valueMaxAbs);
+
     if (minTag) {
-      minTag.textContent = `${Math.round(hist.getValueFromBinIndex(minBin))}`;
+      minTag.textContent = formatTag(minBin);
       minTag.style.left = `${(minBin / binCount) * 100}%`;
     }
     if (maxTag) {
-      maxTag.textContent = `${Math.round(hist.getValueFromBinIndex(maxBin))}`;
+      maxTag.textContent = formatTag(maxBin);
       maxTag.style.left = `${(maxBin / binCount) * 100}%`;
     }
   };
@@ -110,11 +119,11 @@ export function createHistogramController(options: HistogramControllerOptions) {
       return;
     }
 
-    bins[0] = 0;
+    const binCount = (i: number): number => (i === 0 ? 0 : bins[i]);
 
     let maxLog = 0;
     for (let i = 0; i < bins.length; i++) {
-      const v = Math.log1p(bins[i]);
+      const v = Math.log1p(binCount(i));
       if (v > maxLog) {
         maxLog = v;
       }
@@ -126,41 +135,21 @@ export function createHistogramController(options: HistogramControllerOptions) {
 
     const barWidth = w / bins.length;
 
-    const valueMin = hist.getValueFromBinIndex(0);
-    const valueMax = hist.getValueFromBinIndex(bins.length);
-    const valueMaxAbs = Math.max(Math.abs(valueMin), Math.abs(valueMax));
-    const binSize = (valueMax - valueMin) / bins.length;
-
-    const valueMin = hist.getValueFromBinIndex(0);
-    const valueMax = hist.getValueFromBinIndex(bins.length);
-    const valueMaxAbs = Math.max(Math.abs(valueMin), Math.abs(valueMax));
-    const binSize = (valueMax - valueMin) / bins.length;
-
     // colour the bars with the active colormap when one is available (like the original UI),
     // otherwise fall back to the gray silhouette
     let stopColors: Color[] | null = null;
     let cmMin = 0;
     let cmMax = 0;
-
-    const colormapName = getColormapName?.();
-    const colormap = colormapName ? colormaps[colormapName] : null;
-
     const stops = getColormapStops?.();
     if (stops && stops.length > 0) {
       stopColors = stops.map((stop) => new Color(stop));
-      const maxBinIndex = bins.length - 1;
       const range = getColormapRange?.() ?? { min: 0, max: 255 };
-      cmMin = maxBinIndex ? Math.round(range.min / 255 * maxBinIndex) : 0;
-      cmMax = maxBinIndex ? Math.round(range.max / 255 * maxBinIndex) : 0;
-    }
-    const cmRange = cmMax - cmMin || 1;
-    const colormapInverted = getColormapInverted?.() ?? false;
-    if (colormap && colormap.stops && colormap.stops.length > 0) {
-      colormapStopColors = colormap.stops.map((stop: string) => new Color(stop));
+      cmMin = lutToHistogramBin(hist, range.min);
+      cmMax = lutToHistogramBin(hist, range.max);
     }
 
     for (let i = 0; i < bins.length; i++) {
-      const v0 = Math.log1p(bins[i]) / maxLog;
+      const v0 = Math.log1p(binCount(i)) / maxLog;
       const barHeight = v0 * h;
       if (stopColors) {
         const t = (i - cmMin) / (cmMax - cmMin || 1);
@@ -214,25 +203,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
         ctx.lineTo(x, h);
         ctx.stroke();
 
-      const maxWeight = maxHover ? Math.max(selection.maxHandleHoverWeight, 1) : selection.maxHandleHoverWeight;
-      ctx.lineWidth = handleWidth + handleWidthDelta * maxWeight;
-      ctx.beginPath();
-      ctx.moveTo(x1, 0);
-      ctx.lineTo(x1, plotH);
-      ctx.stroke();
-
-      ctx.font = labelFontSize + "px " + labelFontFamily;
-
-      const drawHandleLabel = (binIndex: number, xHandle: number) => {
-        const labelText = formatHistogramValue(hist.getValueFromBinIndex(binIndex), binSize, valueMaxAbs);
-        const textW = ctx.measureText(labelText).width;
-        const boxW = textW + labelPadH * 2;
-        const boxH = labelFontSize + labelPadV * 2;
-        const boxX = Math.min(Math.max(0, xHandle - boxW / 2), w - boxW);
-        const boxY = plotH / 2 - boxH / 2;
-
-        ctx.globalAlpha = labelOpacity;
-        ctx.fillStyle = labelColor;
+        const gripRadius = (GRIP_RADIUS + GRIP_HOVER_BONUS * hoverWeight) * dpr;
         ctx.beginPath();
         ctx.arc(x, h / 2, gripRadius, 0, Math.PI * 2);
         ctx.fillStyle = COLORS.white;
@@ -240,36 +211,11 @@ export function createHistogramController(options: HistogramControllerOptions) {
         ctx.stroke();
       };
 
-      drawHandleLabel(minB, x0);
-      drawHandleLabel(maxB, x1);
+      drawHandle(x0, minWeight);
+      drawHandle(x1, maxWeight);
     }
 
-    ctx.strokeStyle = "#6a6a6a";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, plotH - 1);
-    ctx.lineTo(w, plotH - 1);
-    ctx.moveTo(1, 0);
-    ctx.lineTo(1, plotH);
-    ctx.stroke();
-
-    const xTicks = 5;
-    const tickStep = (binSize * (bins.length - 1)) / xTicks;
-    ctx.fillStyle = "#8a8a8a";
-    ctx.font = "11px sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    for (let i = 0; i <= xTicks; i++) {
-      const x = (i / xTicks) * w;
-      ctx.beginPath();
-      ctx.moveTo(x, plotH - 1);
-      ctx.lineTo(x, plotH - 7);
-      ctx.stroke();
-      const binIndex = (i / xTicks) * (bins.length - 1);
-      const labelValue = hist.getValueFromBinIndex(binIndex);
-      ctx.textAlign = i === 0 ? "left" : i === xTicks ? "right" : "center";
-      ctx.fillText(formatHistogramValue(labelValue, tickStep, valueMaxAbs), x, plotH + 2);
-    }
+    updateTags(hist, selection.minBin, selection.maxBin, bins.length);
   };
 
   const isHistogramDisabled = (): boolean => {
@@ -286,11 +232,9 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const min = selection.minBin;
     const max = selection.maxBin;
 
-    const hist = volume.getHistogram(channelIndex) as any;
-    const numBins = (hist.bins ?? hist.histogram)?.length;
-    const scale = numBins && numBins > 1 ? 255 / (numBins - 1) : 1;
-    const lutMin = Math.round(min * scale);
-    const lutMax = Math.round(max * scale);
+    const hist = volume.getHistogram(channelIndex);
+    const lutMin = histogramBinToLut(hist, min);
+    const lutMax = histogramBinToLut(hist, max);
 
     const view3d = getView3D();
     const lut = isHistogramDisabled() ? new Lut().createNoTransparency() : new Lut().createFromMinMax(lutMin, lutMax);
