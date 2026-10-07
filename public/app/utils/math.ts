@@ -39,3 +39,26 @@ export function histogramBinFromX(x: number, canvas: HTMLCanvasElement, binCount
   const b = Math.floor(t * binCount);
   return Math.max(0, Math.min(binCount - 1, b));
 }
+
+const HISTOGRAM_LABEL_MAX_DECIMALS = 3;
+
+export function formatHistogramValue(value: number, step: number, rangeMaxAbs: number): string {
+  if (!Number.isFinite(value) || !Number.isFinite(step) || step <= 0) {
+    return `${value}`;
+  }
+  if (Math.abs(value) < step / 2) {
+    return "0";
+  }
+
+  const stepExponent = Math.floor(Math.log10(step) + 1e-9);
+
+  if (-stepExponent <= HISTOGRAM_LABEL_MAX_DECIMALS && rangeMaxAbs < 1e6) {
+    const decimals = Math.max(0, -stepExponent);
+    return `${Number(value.toFixed(decimals))}`;
+  }
+
+  const valueExponent = Math.floor(Math.log10(Math.abs(value)));
+  const decimals = Math.min(15, Math.max(0, valueExponent - stepExponent));
+  const [significand, exponent] = value.toExponential(decimals).split("e");
+  return `${Number(significand)}e${exponent.replace("+", "")}`;
+}
