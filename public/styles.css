@@ -286,6 +286,38 @@ body {
   margin-bottom: 0.5rem;
 }
 
+#controls-panel .colormap-range-header {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+#controls-panel .colormap-range-header .controls-section-label {
+  margin: 0;
+}
+
+#controls-panel .colormap-range-map-toggle {
+  margin: 0;
+  cursor: pointer;
+}
+
+#controls-panel .colormap-range-separator {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+#controls-panel .colormap-range-header .colormap-range-map-label {
+  margin-left: auto;
+  cursor: pointer;
+}
+
+#controls-panel .colormap-range-value {
+  width: 5.5rem;
+  min-width: 5.5rem;
+  margin-left: 0;
+  margin-right: 0;
+}
+
 #controls-panel .controls-compact-grid {
   display: grid;
   grid-template-columns: auto auto auto;

@@ -1,14 +1,21 @@
 import { Color } from "three";
-import { View3d, Volume, ColorizeFeature, LUT_ENTRIES } from "../../../src";
+import { View3d, Volume, ColorizeFeature, Lut, LUT_ENTRIES } from "../../../src";
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "../../colorizer";
-import { clamp01 } from "../utils/math";
+import { clamp01, formatColormapRangeValue, histogramValueToLut, lutToHistogramValue } from "../utils/math";
 
 const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
+const LUT_MAX = LUT_ENTRIES - 1;
+
+type ColormapRange = { minBin: number; maxBin: number };
+type RangeHandle = "min" | "max";
+
+const getInput = (id: string) => document.getElementById(id) as HTMLInputElement | null;
 
 interface ColormapControllerState {
   colormap: string;
   colormapMin: number;
   colormapMax: number;
+  colormapRangeMapped: boolean;
   colormapInverted: boolean;
   colorizeEnabled: boolean;
   colorizeChannel: number;
@@ -22,12 +29,11 @@ interface ColormapControllerOptions {
   state: ColormapControllerState;
   getVolume: () => Volume;
   getView3D: () => View3d;
-  getColormapRange?: () => { minBin: number; maxBin: number };
   onColormapChange?: () => void;
 }
 
 export function createColormapController(options: ColormapControllerOptions) {
-  const { state, getVolume, getView3D, getColormapRange, onColormapChange } = options;
+  const { state, getVolume, getView3D, onColormapChange } = options;
 
   const sampleColormapStops = (stopColors: Color[], t: number): [number, number, number] => {
     if (stopColors.length === 0) {
@@ -53,18 +59,16 @@ export function createColormapController(options: ColormapControllerOptions) {
   const buildColormapPalette = (
     stops: string[],
     alphaLut: Uint8Array,
-    minBin?: number,
-    maxBin?: number,
-    inverted?: boolean
+    minBin: number,
+    maxBin: number,
+    inverted: boolean
   ): Uint8Array => {
     const palette = new Uint8Array(LUT_ARRAY_LENGTH);
     const stopColors = stops.map((stop) => new Color(stop));
-    const lo = minBin ?? 0;
-    const hi = maxBin ?? LUT_ENTRIES - 1;
-    const range = hi - lo || 1;
+    const range = maxBin - minBin || 1;
 
     for (let i = 0; i < LUT_ENTRIES; i++) {
-      const t = (i - lo) / range;
+      const t = (i - minBin) / range;
       const [r, g, b] = sampleColormapStops(stopColors, inverted ? 1 - t : t);
       const offset = i * 4;
       palette[offset] = r;
@@ -76,13 +80,66 @@ export function createColormapController(options: ColormapControllerOptions) {
     return palette;
   };
 
-  const applyColormapToChannel = (volume: Volume, channelIndex: number, minBin?: number, maxBin?: number): void => {
+  const getTransparencyRange = (lut: Lut): ColormapRange | null => {
+    let minBin: number | null = null;
+    for (const controlPoint of lut.controlPoints) {
+      if (controlPoint.opacity <= 0) {
+        minBin = controlPoint.x;
+      } else if (controlPoint.opacity >= 1) {
+        return minBin !== null && controlPoint.x > minBin ? { minBin, maxBin: controlPoint.x } : null;
+      }
+    }
+    return null;
+  };
+
+  const getChannelColormapRange = (volume: Volume, channelIndex: number): ColormapRange => {
+    const channel = state.colormapRangeMapped ? volume?.getChannel(channelIndex) : null;
+    const lockedRange = channel?.loaded ? getTransparencyRange(channel.lut) : null;
+    return lockedRange ?? { minBin: state.colormapMin, maxBin: state.colormapMax };
+  };
+
+  const syncColormapRangeUi = (volume: Volume): void => {
+    const { minBin, maxBin } = getChannelColormapRange(volume, 0);
+    const locked = state.colormapRangeMapped;
+    const histogram = volume?.getChannel(0)?.loaded ? volume.getHistogram(0) : null;
+
+    const syncHandle = (sliderId: string, valueBoxId: string, lut: number) => {
+      const slider = getInput(sliderId);
+      if (slider) {
+        slider.value = String(Math.round(lut));
+        slider.disabled = locked;
+      }
+      const valueBox = getInput(valueBoxId);
+      if (valueBox) {
+        valueBox.disabled = locked;
+        if (histogram) {
+          valueBox.value = formatColormapRangeValue(lutToHistogramValue(histogram, lut));
+        }
+      }
+    };
+    syncHandle("colormap-range-min", "colormap-range-left", minBin);
+    syncHandle("colormap-range-max", "colormap-range-right", maxBin);
+
+    const fill = document.getElementById("colormap-range-fill");
+    if (fill) {
+      fill.style.left = `${(minBin / LUT_MAX) * 100}%`;
+      fill.style.right = `${(1 - maxBin / LUT_MAX) * 100}%`;
+      const mergedSlider = fill.closest(".crop-merged-slider");
+      mergedSlider?.classList.toggle("is-disabled", locked);
+      mergedSlider?.setAttribute("aria-disabled", String(locked));
+    }
+  };
+
+  const applyColormapToChannel = (volume: Volume, channelIndex: number): void => {
     if (!volume) {
       return;
     }
     const channel = volume.getChannel(channelIndex);
     if (!channel || !channel.loaded) {
       return;
+    }
+    if (channelIndex === 0) {
+      syncColormapRangeUi(volume);
     }
 
     const channelGui = state.channelGui[channelIndex];
@@ -97,14 +154,8 @@ export function createColormapController(options: ColormapControllerOptions) {
       return;
     }
 
-    const range = getColormapRange?.();
-    const palette = buildColormapPalette(
-      colormap.stops,
-      channel.lut.lut,
-      minBin ?? range?.minBin,
-      maxBin ?? range?.maxBin,
-      state.colormapInverted
-    );
+    const { minBin, maxBin } = getChannelColormapRange(volume, channelIndex);
+    const palette = buildColormapPalette(colormap.stops, channel.lut.lut, minBin, maxBin, state.colormapInverted);
     volume.setColorPalette(channelIndex, palette);
     volume.setColorPaletteAlpha(channelIndex, 1);
   };
@@ -274,106 +325,101 @@ export function createColormapController(options: ColormapControllerOptions) {
     });
   };
 
-  const syncColormapRangeFill = (minInput: HTMLInputElement, maxInput: HTMLInputElement, fill: HTMLElement): void => {
-    const minVal = Number(minInput.value);
-    const maxVal = Number(maxInput.value);
-    fill.style.left = `${(minVal / 255) * 100}%`;
-    fill.style.right = `${(1 - maxVal / 255) * 100}%`;
-  };
-
   const setupColormapRangeControls = (): void => {
-    const minInput = document.getElementById("colormap-range-min") as HTMLInputElement | null;
-    const maxInput = document.getElementById("colormap-range-max") as HTMLInputElement | null;
-    const fill = document.getElementById("colormap-range-fill") as HTMLElement | null;
-    if (!minInput || !maxInput || !fill) {
+    const minInput = getInput("colormap-range-min");
+    const maxInput = getInput("colormap-range-max");
+    if (!minInput || !maxInput) {
       return;
     }
 
-    minInput.value = String(state.colormapMin);
-    maxInput.value = String(state.colormapMax);
-    syncColormapRangeFill(minInput, maxInput, fill);
+    syncColormapRangeUi(getVolume());
 
-    const applyRange = (min: number, max: number) => {
-      const nextMin = Math.round(min);
-      const nextMax = Math.round(max);
-      state.colormapMin = nextMin;
-      state.colormapMax = nextMax;
-      minInput.value = String(nextMin);
-      maxInput.value = String(nextMax);
-      syncColormapRangeFill(minInput, maxInput, fill);
+    const refresh = () => {
       const volume = getVolume();
-      if (volume) {
-        applyColormapToVolume(volume);
-      }
+      syncColormapRangeUi(volume);
+      applyColormapToVolume(volume);
       onColormapChange?.();
     };
 
-    const onMinInput = () => {
-      const b = Number(minInput.value);
-      if (b > Number(maxInput.value)) {
-        applyRange(b, b);
+    // The range is kept in LUT units. The sliders move in whole units, manual input can land in between.
+    const applyRange = (min: number, max: number) => {
+      state.colormapMin = min;
+      state.colormapMax = max;
+      refresh();
+    };
+
+    const moveHandle = (handle: RangeHandle, lut: number) => {
+      if (handle === "min") {
+        applyRange(Math.min(lut, state.colormapMax), state.colormapMax);
       } else {
-        applyRange(b, state.colormapMax);
+        applyRange(state.colormapMin, Math.max(lut, state.colormapMin));
       }
     };
 
-    const onMaxInput = () => {
-      const b = Number(maxInput.value);
-      if (b < Number(minInput.value)) {
-        applyRange(b, b);
-      } else {
-        applyRange(state.colormapMin, b);
-      }
-    };
+    minInput.addEventListener("input", () => moveHandle("min", Number(minInput.value)));
+    maxInput.addEventListener("input", () => moveHandle("max", Number(maxInput.value)));
 
-    minInput.addEventListener("input", onMinInput);
-    maxInput.addEventListener("input", onMaxInput);
+    const setupValueBox = (id: string, handle: RangeHandle) => {
+      const valueBox = getInput(id);
+      if (!valueBox) {
+        return;
+      }
+      valueBox.addEventListener("change", () => {
+        const volume = getVolume();
+        const value = valueBox.value.trim() === "" ? NaN : Number(valueBox.value);
+        if (Number.isFinite(value) && volume?.getChannel(0)?.loaded) {
+          moveHandle(handle, histogramValueToLut(volume.getHistogram(0), value));
+        } else {
+          syncColormapRangeUi(volume);
+        }
+      });
+      valueBox.addEventListener("focus", () => valueBox.select());
+      valueBox.addEventListener("click", () => valueBox.select());
+      valueBox.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          valueBox.blur();
+        }
+      });
+    };
+    setupValueBox("colormap-range-left", "min");
+    setupValueBox("colormap-range-right", "max");
+
+    const mapToggle = getInput("colormap-range-map-toggle");
+    if (mapToggle) {
+      mapToggle.checked = state.colormapRangeMapped;
+      mapToggle.addEventListener("change", () => {
+        state.colormapRangeMapped = mapToggle.checked;
+        refresh();
+      });
+    }
 
     const mergedSlider = minInput.closest(".crop-merged-slider") as HTMLElement | null;
     if (!mergedSlider) {
       return;
     }
 
-    const rangeMin = Number(minInput.min) || 0;
-    const rangeMax = Number(maxInput.max) || 255;
-    const rangeSpan = rangeMax - rangeMin;
+    let activeHandle: RangeHandle | null = null;
 
-    let activeHandle: "min" | "max" | null = null;
-
-    const valueAtClientX = (clientX: number): number | null => {
+    const dragTo = (clientX: number): boolean => {
       const rect = mergedSlider.getBoundingClientRect();
       if (rect.width <= 0) {
-        return null;
+        return false;
       }
-      const normalized = clamp01((clientX - rect.left) / rect.width);
-      return rangeMin + normalized * rangeSpan;
-    };
-
-    const updateFromClientX = (clientX: number, handle: "min" | "max") => {
-      const value = valueAtClientX(clientX);
-      if (value === null) {
-        return;
-      }
-      if (handle === "min") {
-        applyRange(Math.min(value, state.colormapMax), state.colormapMax);
-      } else {
-        applyRange(state.colormapMin, Math.max(value, state.colormapMin));
-      }
+      const lut = clamp01((clientX - rect.left) / rect.width) * LUT_MAX;
+      activeHandle ??= Math.abs(lut - state.colormapMin) <= Math.abs(lut - state.colormapMax) ? "min" : "max";
+      moveHandle(activeHandle, Math.round(lut));
+      return true;
     };
 
     mergedSlider.addEventListener("pointerdown", (event: PointerEvent) => {
       const target = event.target as HTMLElement;
-      if (target === minInput || target === maxInput) {
+      if (state.colormapRangeMapped || target === minInput || target === maxInput) {
         return;
       }
-      const value = valueAtClientX(event.clientX);
-      if (value === null) {
+      if (!dragTo(event.clientX)) {
         return;
       }
-      const minDistance = Math.abs(value - state.colormapMin);
-      const maxDistance = Math.abs(value - state.colormapMax);
-      activeHandle = minDistance <= maxDistance ? "min" : "max";
-      updateFromClientX(event.clientX, activeHandle);
       mergedSlider.setPointerCapture(event.pointerId);
       event.preventDefault();
     });
@@ -382,7 +428,7 @@ export function createColormapController(options: ColormapControllerOptions) {
       if (!activeHandle) {
         return;
       }
-      updateFromClientX(event.clientX, activeHandle);
+      dragTo(event.clientX);
       event.preventDefault();
     });
 
@@ -433,6 +479,7 @@ export function createColormapController(options: ColormapControllerOptions) {
   return {
     applyColormapToChannel,
     applyColormapToVolume,
+    getChannelColormapRange,
     getStateColorizeFeature,
     setColormapInUrl,
     setupColorizeControls,
