@@ -44,7 +44,7 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
 
     let text = "Auto";
     if (totalLevels > 1) {
-      const resolved = `Level ${currentLevel}/${totalLevels - 1}`;
+      const resolved = `${currentLevel}/${totalLevels - 1}`;
       text = explicit ? `Level ${currentLevel} · ${resolved}` : `Auto · ${resolved}`;
     }
     button.querySelector("#ome-zarr-scale-select-text")?.replaceChildren(text);
