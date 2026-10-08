@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qim Volume Explorer</title>
-    <style id="initial-ui-visibility">.topbar,.panel,.panel-tab,.menu,.menu-scrim,#error-note{display:none}</style>
+    <style id="initial-ui-visibility">.topbar,.panel,.panel-tab,.menu,.menu-scrim{display:none}</style>
     <script>
       (function () {
         const hidden = new URLSearchParams(window.location.search).get("hidden")?.trim().toLowerCase() === "true";
@@ -30,7 +30,10 @@
         </div>
       </div>
 
-      <div id="error-note" class="error-note" aria-live="polite"></div>
+      <div id="error-note" class="error-note" role="alert" aria-live="polite" hidden>
+        <p id="error-note-message"></p>
+        <button id="error-note-close" class="error-note__close" type="button">Close</button>
+      </div>
 
       <!-- ======================= TOP BAR ======================= -->
       <header class="card topbar" id="topbar">
@@ -48,20 +51,22 @@
 
         <div class="topbar__right">
           <span class="topbar__label" id="ome-zarr-scale-label">OME-Zarr scale</span>
-          <button
-            id="ome-zarr-scale-select"
-            class="select"
-            type="button"
-            aria-haspopup="listbox"
-            aria-expanded="false">
-            <span id="ome-zarr-scale-select-text">Auto</span>
-            <span class="select__chevron" aria-hidden="true">
-              <svg viewBox="0 0 16 16" width="12" height="12">
-                <path d="M4 6 l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </span>
-          </button>
-          <ul id="ome-zarr-scale-options" class="select__options" role="listbox" aria-label="OME-Zarr scale levels" hidden></ul>
+          <div class="select__options-anchor">
+            <button
+              id="ome-zarr-scale-select"
+              class="select"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false">
+              <span id="ome-zarr-scale-select-text">Auto</span>
+              <span class="select__chevron" aria-hidden="true">
+                <svg viewBox="0 0 16 16" width="12" height="12">
+                  <path d="M4 6 l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+            </button>
+            <ul id="ome-zarr-scale-options" class="select__options" role="listbox" aria-label="OME-Zarr scale levels" hidden></ul>
+          </div>
 
           <button id="export-button" class="btn-export" type="button" aria-haspopup="true" aria-expanded="false">
             Export

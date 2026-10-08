@@ -71,8 +71,16 @@ function setVolumeLoading(isLoading: boolean) {
 
 function setUiNote(warning?: string) {
   const note = document.getElementById("error-note");
-  if (note) {
-    note.textContent = warning ?? "";
+  const message = document.getElementById("error-note-message");
+  if (!note || !message) {
+    return;
+  }
+  if (warning) {
+    message.textContent = warning;
+    note.hidden = false;
+  } else {
+    note.hidden = true;
+    message.textContent = "";
   }
 }
 
@@ -1133,6 +1141,15 @@ function main() {
   });
 
   setupRangeFillSync();
+
+  // error modal: allow dismissing via its Close button or Escape
+  const errorCloseBtn = document.getElementById("error-note-close");
+  errorCloseBtn?.addEventListener("click", () => setUiNote());
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setUiNote();
+    }
+  });
 
   const changeRenderMode = (pt: boolean, mp: boolean) => {
     myState.isPT = pt;
