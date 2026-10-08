@@ -139,6 +139,7 @@
               <span class="row__axis">Z</span>
               <input id="crop-z-left" class="num" type="number" min="0" step="1" value="0" aria-label="Crop Z start index" />
               <div class="slider" id="crop-z-slider">
+                <div class="slider__track"></div>
                 <div class="slider__fill" id="crop-z-fill"></div>
                 <div class="slider__thumb" id="crop-z-min" data-handle="min" aria-label="Crop Z minimum"></div>
                 <div class="slider__thumb" id="crop-z-max" data-handle="max" aria-label="Crop Z maximum"></div>
@@ -150,6 +151,7 @@
               <span class="row__axis">Y</span>
               <input id="crop-y-left" class="num" type="number" min="0" step="1" value="0" aria-label="Crop Y start index" />
               <div class="slider" id="crop-y-slider">
+                <div class="slider__track"></div>
                 <div class="slider__fill" id="crop-y-fill"></div>
                 <div class="slider__thumb" id="crop-y-min" data-handle="min" aria-label="Crop Y minimum"></div>
                 <div class="slider__thumb" id="crop-y-max" data-handle="max" aria-label="Crop Y maximum"></div>
@@ -161,6 +163,7 @@
               <span class="row__axis">X</span>
               <input id="crop-x-left" class="num" type="number" min="0" step="1" value="0" aria-label="Crop X start index" />
               <div class="slider" id="crop-x-slider">
+                <div class="slider__track"></div>
                 <div class="slider__fill" id="crop-x-fill"></div>
                 <div class="slider__thumb" id="crop-x-min" data-handle="min" aria-label="Crop X minimum"></div>
                 <div class="slider__thumb" id="crop-x-max" data-handle="max" aria-label="Crop X maximum"></div>
@@ -175,7 +178,7 @@
 
             <div class="field">
               <span>3D handles</span>
-              <button class="toggle" id="cropHandlesToggle" type="button" role="switch" aria-checked="true" aria-label="Toggle draggable 3D crop handles"></button>
+              <button class="toggle" id="cropHandlesToggle" type="button" role="switch" aria-checked="false" aria-label="Toggle draggable 3D crop handles"></button>
             </div>
           </section>
         </div>
@@ -233,7 +236,7 @@
             <div class="section__label">Display</div>
             <div class="field">
               <span>Grid</span>
-              <button class="toggle" id="showBoundingBox" type="button" role="switch" aria-checked="true" aria-label="Toggle bounding box"></button>
+              <button class="toggle" id="showBoundingBox" type="button" role="switch" aria-checked="false" aria-label="Toggle bounding box"></button>
             </div>
             <div class="field">
               <span>Background</span>

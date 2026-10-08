@@ -233,6 +233,10 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     }
   }
 
+  function setHidden(el: HTMLElement | null, hidden: boolean) {
+    el?.toggleAttribute("hidden", hidden);
+  }
+
   function updateSliceSelectorUI() {
     const section = document.getElementById("slice-position-section") as HTMLElement | null;
     const divider = document.getElementById("slice-divider") as HTMLElement | null;
@@ -240,12 +244,12 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     const multiRows = document.getElementById("slice-ortho-rows") as HTMLElement | null;
 
     const isSliceMode = activeSliceAxis !== null || isMultiSliceMode;
-    section?.classList.toggle("hidden", !isSliceMode);
-    divider?.classList.toggle("hidden", !isSliceMode);
+    setHidden(section, !isSliceMode);
+    setHidden(divider, !isSliceMode);
 
     if (isMultiSliceMode) {
-      singleRow?.classList.add("hidden");
-      multiRows?.classList.remove("hidden");
+      setHidden(singleRow, true);
+      setHidden(multiRows, false);
       updateMultiSliceUI();
       updateSliceViewCurrentLabel();
       updateSliceModeControlStates();
@@ -255,16 +259,16 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
       return;
     }
 
-    multiRows?.classList.add("hidden");
+    setHidden(multiRows, true);
 
     if (!activeSliceAxis) {
-      singleRow?.classList.add("hidden");
+      setHidden(singleRow, true);
       updateSliceViewCurrentLabel();
       updateSliceModeControlStates();
       return;
     }
 
-    singleRow?.classList.remove("hidden");
+    setHidden(singleRow, false);
     updateSingleSliceUI(activeSliceAxis);
     updateSliceViewCurrentLabel();
     updateSliceModeControlStates();

@@ -127,7 +127,7 @@ function resetSliceIndicesForVolume(volume: Volume) {
   cropSliceManager.resetSliceIndicesForVolume(volume);
 }
 
-let cropHandlesToggleOn = true;
+let cropHandlesToggleOn = false;
 let currentCameraMode: CameraMode = "3D";
 
 function updateCropHandlesEnabled() {

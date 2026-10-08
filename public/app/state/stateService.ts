@@ -107,7 +107,7 @@ export function createInitialState(): State {
 
     showScaleBar: true,
 
-    showBoundingBox: true,
+    showBoundingBox: false,
     boundingBoxColor: DEFAULT_COLORS.boundingBox,
     backgroundColor: DEFAULT_COLORS.background,
     flipX: 1,
