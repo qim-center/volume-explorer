@@ -168,8 +168,8 @@ button { font-family: inherit; cursor: pointer; }
 .toggle[aria-checked="true"]::after { left: 18px; }
 
 /* ---------- colormap block ---------- */
-.colormap-head { position: relative; display: flex; align-items: center; gap: 8px; }
-.colormap-chip { width: 60px; height: 10px; border: 0; border-radius: 5px; background: var(--colormap); padding: 0; }
+.colormap-head { position: relative; display: flex; align-items: center; gap: 8px; flex: 1; }
+.colormap-chip { flex: 1; min-width: 60px; height: 10px; border: 0; border-radius: 5px; background: var(--colormap); padding: 0; }
 .colormap-chip__chevron { color: var(--label); display: inline-flex; }
 
 /* floating picker anchored below the header row (right-aligned to the Invert button) */
