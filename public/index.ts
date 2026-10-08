@@ -1142,9 +1142,8 @@ function main() {
 
   setupRangeFillSync();
 
-  // error modal: allow dismissing via its Close button or Escape
-  const errorCloseBtn = document.getElementById("error-note-close");
-  errorCloseBtn?.addEventListener("click", () => setUiNote());
+  // error modal: dismiss via its X button or Escape
+  document.getElementById("error-note-close")?.addEventListener("click", () => setUiNote());
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       setUiNote();
