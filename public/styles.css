@@ -20,9 +20,9 @@
   --track: #e8e8e3;           /* slider track */
   --hist-fill: #c9c9c3;
   --swatch-border: #cfcfc8;
-  --accent: #1f7a4d;          /* slider fill, toggle on, opacity ramp */
+  --accent: #FC7323;          /* slider fill, toggle on, opacity ramp */
   --toggle-off: #d4d4ce;
-  --colormap: linear-gradient(90deg, #440154, #21908d, #fde725); /* viridis */
+  --colormap: linear-gradient(90deg, #0d0887, #9c179e, #ed7953, #f0f921); /* plasma */
 
   /* shape */
   --r-card: 8px;

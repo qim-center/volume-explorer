@@ -40,10 +40,16 @@ const sampleColormapStops = (stopColors: Color[], t: number): [number, number, n
 
 const COLORS = {
   silhouette: "#c9c9c3",
-  rampFill: "rgba(31, 122, 77, 0.22)",
-  accent: "#1f7a4d",
+  rampFill: "rgba(255, 255, 255, 0.22)",
+  fullOpacity: "rgba(255, 255, 255, 0.5)",
   ink: "#1b1c1b",
   white: "#ffffff",
+};
+
+// accent color is defined once as the --accent CSS variable; the canvas reads it at draw time
+const getAccentColor = (): string => {
+  const value = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  return value || "#fc7323";
 };
 
 const HANDLE_WIDTH = 1.5;
@@ -144,7 +150,8 @@ export function createHistogramController(options: HistogramControllerOptions) {
       } else {
         ctx.fillStyle = COLORS.silhouette;
       }
-      ctx.fillRect(i * barWidth, h - barHeight, Math.max(1, barWidth), barHeight);
+      // overdraw by 1px so sub-pixel anti-aliasing never leaves a seam between adjacent bars
+      ctx.fillRect(i * barWidth, h - barHeight, Math.max(1, Math.ceil(barWidth) + 1), barHeight);
     }
 
     if (!isHistogramDisabled()) {
@@ -163,7 +170,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
         ctx.closePath();
         ctx.fill();
 
-        ctx.strokeStyle = COLORS.accent;
+        ctx.strokeStyle = getAccentColor();
         ctx.lineWidth = HANDLE_WIDTH * dpr;
         ctx.beginPath();
         ctx.moveTo(x0, h);
@@ -171,8 +178,8 @@ export function createHistogramController(options: HistogramControllerOptions) {
         ctx.stroke();
       }
 
-      // right of the max handle: full opacity
-      ctx.fillStyle = COLORS.accent;
+      // right of the max handle: full opacity (translucent white, hue-free)
+      ctx.fillStyle = COLORS.fullOpacity;
       ctx.fillRect(x1, 0, Math.max(0, w - x1), h);
 
       const minHover = selection.hover === "min" || selection.dragging === "min";
@@ -181,7 +188,7 @@ export function createHistogramController(options: HistogramControllerOptions) {
       const maxWeight = maxHover ? Math.max(selection.maxHandleHoverWeight, 0.01) : selection.maxHandleHoverWeight;
 
       const drawHandle = (x: number, hoverWeight: number): void => {
-        ctx.strokeStyle = COLORS.ink;
+        ctx.strokeStyle = getAccentColor();
         ctx.lineWidth = HANDLE_WIDTH * dpr;
         ctx.beginPath();
         ctx.moveTo(x, 0);
