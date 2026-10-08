@@ -454,6 +454,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
           state[minKey] = minValue;
           state[maxKey] = maxValue;
           syncCropDimensionInputs(axis);
+          applyCropRegionFromState();
         },
       });
 
