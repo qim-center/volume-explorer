@@ -390,6 +390,7 @@ export function createColormapController(options: ColormapControllerOptions) {
     applyColormapToVolume,
     getStateColorizeFeature,
     setColormapInUrl,
+    getColormapStops: (): string[] | null => getOrderedColormapStops(state.colormap),
     setupColorizeControls,
     setupColormapRangeControls,
     setupColormapChipControl,

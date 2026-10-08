@@ -1167,6 +1167,8 @@ function main() {
     selection: histogramSelection,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
+    getColormapStops: () => colormapController?.getColormapStops() ?? null,
+    getColormapRange: () => ({ min: myState.colormapMin, max: myState.colormapMax }),
     onLutUpdated: (volume, channelIndex) => {
       applyColormapToChannel(volume, channelIndex);
     },
