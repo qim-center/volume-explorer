@@ -1,13 +1,11 @@
 import { View3d } from "../../../src";
 import { State } from "../../types";
-import { CameraMode } from "../state/stateService";
 import { densitySliderToView3D } from "../utils/math";
-import { hexToRgb01 } from "../utils/color";
+import { hexToRgb01, rgb01ToHex } from "../utils/color";
 
 interface BindPrimaryViewControlsOptions {
   state: State;
   view3D: View3d;
-  setActiveSliceMode: (mode: CameraMode) => void;
 }
 
 interface BindPlaybackAndRenderControlsOptions {
@@ -25,82 +23,50 @@ interface BindPlaybackAndRenderControlsOptions {
 }
 
 export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions): void {
-  const { state, view3D, setActiveSliceMode } = options;
-
-  const cameraModeButtons: Record<CameraMode, HTMLButtonElement | null> = {
-    X: document.getElementById("X") as HTMLButtonElement | null,
-    Y: document.getElementById("Y") as HTMLButtonElement | null,
-    Z: document.getElementById("Z") as HTMLButtonElement | null,
-    ORTHO: document.getElementById("ORTHO") as HTMLButtonElement | null,
-    "3D": document.getElementById("3D") as HTMLButtonElement | null,
-  };
-
-  const setActiveCameraModeButton = (mode: CameraMode) => {
-    (Object.keys(cameraModeButtons) as CameraMode[]).forEach((cameraMode) => {
-      cameraModeButtons[cameraMode]?.classList.toggle("is-active", cameraMode === mode);
-    });
-  };
-
-  const bindCameraModeButton = (mode: CameraMode) => {
-    cameraModeButtons[mode]?.addEventListener("click", () => {
-      view3D.setCameraMode(mode);
-      setActiveCameraModeButton(mode);
-      setActiveSliceMode(mode);
-    });
-  };
-
-  bindCameraModeButton("X");
-  bindCameraModeButton("Y");
-  bindCameraModeButton("Z");
-  bindCameraModeButton("ORTHO");
-  bindCameraModeButton("3D");
-  setActiveCameraModeButton("3D");
-  setActiveSliceMode("3D");
+  const { state, view3D } = options;
 
   const rotBtn = document.getElementById("rotBtn");
   rotBtn?.addEventListener("click", () => {
     state.isTurntable = !state.isTurntable;
     view3D.setAutoRotate(state.isTurntable);
   });
-  const axisToggle = document.getElementById("axisBtn") as HTMLInputElement | null;
-  if (axisToggle) {
-    if (axisToggle.type === "checkbox") {
-      axisToggle.checked = state.isAxisShowing;
-    }
-    axisToggle.addEventListener("change", (event: Event) => {
-      const target = event.target as HTMLInputElement;
-      state.isAxisShowing = target.type === "checkbox" ? target.checked : !state.isAxisShowing;
-      view3D.setShowAxis(state.isAxisShowing);
-    });
-  }
-  const showBoundsToggle = document.getElementById("showBoundingBox") as HTMLInputElement | null;
+
+  const showBoundsToggle = document.getElementById("showBoundingBox") as HTMLButtonElement | null;
   if (showBoundsToggle) {
-    if (showBoundsToggle.type === "checkbox") {
-      showBoundsToggle.checked = state.showBoundingBox;
-    }
-    showBoundsToggle.addEventListener("change", (event: Event) => {
-      const target = event.target as HTMLInputElement;
-      state.showBoundingBox = target.type === "checkbox" ? target.checked : !state.showBoundingBox;
+    const syncToggle = (): void => {
+      showBoundsToggle.setAttribute("aria-checked", String(state.showBoundingBox));
+    };
+    syncToggle();
+
+    showBoundsToggle.addEventListener("click", () => {
+      state.showBoundingBox = !state.showBoundingBox;
+      syncToggle();
       view3D.setBoundingBoxColor(state.volume, state.boundingBoxColor);
       view3D.setShowBoundingBox(state.volume, state.showBoundingBox);
     });
   }
-  const showScaleBarBtn = document.getElementById("showScaleBar");
-  showScaleBarBtn?.addEventListener("click", () => {
-    state.showScaleBar = !state.showScaleBar;
-    view3D.setShowScaleBar(state.showScaleBar);
-  });
 
-  const boundsColorBtn = document.getElementById("boundingBoxColor");
-  boundsColorBtn?.addEventListener("change", (event: Event) => {
-    state.boundingBoxColor = hexToRgb01((event.target as HTMLInputElement)?.value, state.boundingBoxColor);
-    view3D.setBoundingBoxColor(state.volume, state.boundingBoxColor);
-  });
-  const backgroundColorBtn = document.getElementById("backgroundColor");
-  backgroundColorBtn?.addEventListener("change", (event: Event) => {
-    state.backgroundColor = hexToRgb01((event.target as HTMLInputElement)?.value, state.backgroundColor);
-    view3D.setBackgroundColor(state.backgroundColor);
-  });
+  const backgroundSwatch = document.getElementById("backgroundColor") as HTMLButtonElement | null;
+  const backgroundPicker = document.getElementById("backgroundColor-input") as HTMLInputElement | null;
+  if (backgroundSwatch && backgroundPicker) {
+    const applyBackgroundColor = (hex: string): void => {
+      state.backgroundColor = hexToRgb01(hex, state.backgroundColor);
+      const hexValue = rgb01ToHex(state.backgroundColor);
+      backgroundSwatch.style.background = hexValue;
+      document.body.style.background = hexValue;
+      view3D.setBackgroundColor(state.backgroundColor);
+    };
+
+    backgroundSwatch.style.background = rgb01ToHex(state.backgroundColor);
+    backgroundPicker.value = rgb01ToHex(state.backgroundColor);
+
+    backgroundSwatch.addEventListener("click", () => {
+      backgroundPicker.click();
+    });
+    backgroundPicker.addEventListener("change", () => {
+      applyBackgroundColor(backgroundPicker.value);
+    });
+  }
 
   const globalOpacitySlider = document.getElementById("global-opacity-slider") as HTMLInputElement | null;
   const globalOpacityInput = document.getElementById("global-opacity-input") as HTMLInputElement | null;
@@ -108,9 +74,8 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
     const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
     const applyOpacityPercent = (percent: number) => {
       const clampedPercent = clampPercent(percent);
-      const sliderValue = clampedPercent / 100;
       state.density = clampedPercent;
-      globalOpacitySlider.value = `${sliderValue}`;
+      globalOpacitySlider.value = `${clampedPercent}`;
       globalOpacitySlider.style.setProperty("--value", `${clampedPercent}`);
       if (globalOpacityInput) {
         globalOpacityInput.value = `${clampedPercent}`;
@@ -121,8 +86,7 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
     applyOpacityPercent(state.density);
 
     const onGlobalOpacityInput = () => {
-      const sliderValue = Math.min(1, Math.max(0, globalOpacitySlider.valueAsNumber));
-      applyOpacityPercent(sliderValue * 100);
+      applyOpacityPercent(globalOpacitySlider.valueAsNumber);
     };
 
     globalOpacitySlider.addEventListener("input", onGlobalOpacityInput);
@@ -278,14 +242,14 @@ export function bindPlaybackAndRenderControls(options: BindPlaybackAndRenderCont
     });
   }
 
-  const renderModeSelect = document.getElementById("renderMode");
-  renderModeSelect?.addEventListener("change", ({ currentTarget }) => {
-    const target = (currentTarget as HTMLOptionElement)!;
-    if (target.value === "PT") {
+  const renderModeSelect = document.getElementById("renderMode") as HTMLSelectElement | null;
+  renderModeSelect?.addEventListener("change", () => {
+    const value = renderModeSelect.value;
+    if (value === "PT") {
       if (view3D.hasWebGL2()) {
         changeRenderMode(true, false);
       }
-    } else if (target.value === "MP") {
+    } else if (value === "MP") {
       changeRenderMode(false, true);
     } else {
       changeRenderMode(false, false);
@@ -298,41 +262,17 @@ export function bindPlaybackAndRenderControls(options: BindPlaybackAndRenderCont
     view3D.setInterpolationEnabled(state.volume, state.interpolationActive);
   });
 
-  const screenshotButton = document.getElementById("screenshot-button") as HTMLButtonElement | null;
-  screenshotButton?.addEventListener("click", () => {
-    view3D.capture((dataUrl) => {
-      const anchor = document.createElement("a");
-      anchor.href = dataUrl;
-      anchor.download = "screenshot.png";
-      anchor.click();
-    });
-  });
-
   const gammaMin = document.getElementById("gammaMin") as HTMLInputElement;
   const gammaMax = document.getElementById("gammaMax") as HTMLInputElement;
   const gammaScale = document.getElementById("gammaScale") as HTMLInputElement;
-  gammaMin?.addEventListener("change", () => {
+  const applyGamma = () => {
     const g = gammaSliderToImageValues([gammaMin.valueAsNumber, gammaScale.valueAsNumber, gammaMax.valueAsNumber]);
     view3D.setGamma(state.volume, g[0], g[1], g[2]);
-  });
-  gammaMin?.addEventListener("input", () => {
-    const g = gammaSliderToImageValues([gammaMin.valueAsNumber, gammaScale.valueAsNumber, gammaMax.valueAsNumber]);
-    view3D.setGamma(state.volume, g[0], g[1], g[2]);
-  });
-  gammaMax?.addEventListener("change", () => {
-    const g = gammaSliderToImageValues([gammaMin.valueAsNumber, gammaScale.valueAsNumber, gammaMax.valueAsNumber]);
-    view3D.setGamma(state.volume, g[0], g[1], g[2]);
-  });
-  gammaMax?.addEventListener("input", () => {
-    const g = gammaSliderToImageValues([gammaMin.valueAsNumber, gammaScale.valueAsNumber, gammaMax.valueAsNumber]);
-    view3D.setGamma(state.volume, g[0], g[1], g[2]);
-  });
-  gammaScale?.addEventListener("change", () => {
-    const g = gammaSliderToImageValues([gammaMin.valueAsNumber, gammaScale.valueAsNumber, gammaMax.valueAsNumber]);
-    view3D.setGamma(state.volume, g[0], g[1], g[2]);
-  });
-  gammaScale?.addEventListener("input", () => {
-    const g = gammaSliderToImageValues([gammaMin.valueAsNumber, gammaScale.valueAsNumber, gammaMax.valueAsNumber]);
-    view3D.setGamma(state.volume, g[0], g[1], g[2]);
-  });
+  };
+  gammaMin?.addEventListener("change", applyGamma);
+  gammaMin?.addEventListener("input", applyGamma);
+  gammaMax?.addEventListener("change", applyGamma);
+  gammaMax?.addEventListener("input", applyGamma);
+  gammaScale?.addEventListener("change", applyGamma);
+  gammaScale?.addEventListener("input", applyGamma);
 }

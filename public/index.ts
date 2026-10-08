@@ -12,6 +12,7 @@ import {
   RENDERMODE_PATHTRACE,
   RENDERMODE_RAYMARCH,
   VolumeFileFormat,
+  ViewportCorner,
 } from "../src";
 import { TestDataSpec } from "./types";
 import VolumeLoaderContext from "../src/workers/VolumeLoaderContext";
@@ -23,12 +24,7 @@ import {
   DEFAULT_TEST_DATA,
 } from "./app/state/stateService";
 import { createCropSliceManager } from "./app/crop/cropSliceManager";
-import {
-  getSourceLoadErrorMessage,
-  revertScaleToAuto,
-  SCALE_TOO_LARGE_MESSAGE,
-  setParagraphWarning,
-} from "./app/errors/errorHandling";
+import { getSourceLoadErrorMessage, SCALE_TOO_LARGE_MESSAGE } from "./app/errors/errorHandling";
 import {
   removeFolderByName as removeAdvancedGuiFolderByName,
   setupAdvancedGui,
@@ -37,10 +33,14 @@ import {
 import { bindPlaybackAndRenderControls, bindPrimaryViewControls } from "./app/ui/eventBinder";
 import { setupRangeFillSync } from "./app/ui/sliderFill";
 import { getAppUiElements } from "./app/ui/elementRegistry";
+import { setupExportMenu } from "./app/ui/exportMenu";
+import { setupPanelCollapse } from "./app/ui/panelCollapse";
+import { setupScaleSelect } from "./app/ui/scaleSelect";
+import { setupViewMode } from "./app/ui/viewMode";
 import { createHistogramController } from "./app/histogram/histogramController";
 import { createColormapController } from "./app/colormap/colormapController";
 import { createLoaderOrchestration } from "./app/loaders/loaderOrchestration";
-import { rgb01ToHex, rgb255ToHex } from "./app/utils/color";
+import { rgb01ToHex } from "./app/utils/color";
 import { densitySliderToView3D, gammaSliderToImageValues } from "./app/utils/math";
 import { inferVolumeFileFormat } from "./app/utils/source";
 
@@ -62,13 +62,18 @@ function getMaxActiveRequestsFromUrl(): number {
 let view3D: View3d;
 
 function setVolumeLoading(isLoading: boolean) {
-  document.body.classList.toggle("volume-loading", isLoading);
+  const overlay = document.getElementById("volume-loading-overlay") as HTMLElement | null;
+  if (overlay) {
+    overlay.classList.toggle("is-visible", isLoading);
+    overlay.setAttribute("aria-hidden", isLoading ? "false" : "true");
+  }
+}
 
-  const overlayIndicator = document.getElementById("volume-loading-overlay") as HTMLElement | null;
-  overlayIndicator?.setAttribute("aria-hidden", isLoading ? "false" : "true");
-
-  const inlineIndicator = document.getElementById("ome-zarr-scale-loading-indicator") as HTMLElement | null;
-  inlineIndicator?.setAttribute("aria-hidden", isLoading ? "false" : "true");
+function setUiNote(warning?: string) {
+  const note = document.getElementById("error-note");
+  if (note) {
+    note.textContent = warning ?? "";
+  }
 }
 
 const myState = createInitialState();
@@ -122,7 +127,7 @@ function resetSliceIndicesForVolume(volume: Volume) {
   cropSliceManager.resetSliceIndicesForVolume(volume);
 }
 
-let cropHandlesToggleOn = false;
+let cropHandlesToggleOn = true;
 let currentCameraMode: CameraMode = "3D";
 
 function updateCropHandlesEnabled() {
@@ -286,39 +291,10 @@ function updateScenesUI() {
   sceneInput.value = `${Math.min(myState.scene, maxSceneIndex)}`;
 }
 
+let scaleSelectApi: ReturnType<typeof setupScaleSelect> | null = null;
+
 function updateOmeZarrScaleSelect(volume: Volume) {
-  const selectEl = document.getElementById("ome-zarr-scale-select") as HTMLSelectElement | null;
-  if (!selectEl) {
-    return;
-  }
-  const scaleLabelEl = document.getElementById("ome-zarr-scale-level-value");
-
-  const totalLevels = volume.imageInfo.numMultiscaleLevels;
-  const currentLevel = volume.imageInfo.multiscaleLevel;
-
-  selectEl.innerHTML = "";
-
-  const autoOption = document.createElement("option");
-  autoOption.value = "auto";
-  autoOption.textContent = "Auto";
-  selectEl.appendChild(autoOption);
-
-  for (let i = 0; i < totalLevels; i++) {
-    const option = document.createElement("option");
-    option.value = String(i);
-    option.textContent = `Level ${i}`;
-    selectEl.appendChild(option);
-  }
-
-  if (volume.loadSpec.useExplicitLevel) {
-    selectEl.value = String(currentLevel);
-  } else {
-    selectEl.value = "auto";
-  }
-
-  if (scaleLabelEl) {
-    scaleLabelEl.textContent = totalLevels > 1 ? `${currentLevel}/${totalLevels - 1}` : "n/a";
-  }
+  scaleSelectApi?.rebuild(volume);
 }
 
 function updateChannelUI(vol: Volume, channelIndex: number) {
@@ -847,15 +823,19 @@ function getStateColorizeFeature(): ColorizeFeature | null {
 }
 
 function syncColorInputsToState() {
-  const boundingBoxColorInput = document.getElementById("boundingBoxColor") as HTMLInputElement | null;
-  if (boundingBoxColorInput) {
-    boundingBoxColorInput.value = rgb01ToHex(myState.boundingBoxColor);
+  const hexValue = rgb01ToHex(myState.backgroundColor);
+
+  const backgroundColorInput = document.getElementById("backgroundColor-input") as HTMLInputElement | null;
+  if (backgroundColorInput) {
+    backgroundColorInput.value = hexValue;
   }
 
-  const backgroundColorInput = document.getElementById("backgroundColor") as HTMLInputElement | null;
-  if (backgroundColorInput) {
-    backgroundColorInput.value = rgb01ToHex(myState.backgroundColor);
+  const backgroundSwatch = document.getElementById("backgroundColor") as HTMLButtonElement | null;
+  if (backgroundSwatch) {
+    backgroundSwatch.style.background = hexValue;
   }
+
+  document.body.style.background = hexValue;
 }
 
 function main() {
@@ -868,9 +848,7 @@ function main() {
     myState.colormap = colormapParam;
   }
   if (hiddenParam === "true") {
-    if (ui.controlsPanel) {
-      ui.controlsPanel.classList.add("hidden");
-    }
+    document.body.classList.add("ui-hidden");
   }
 
   const el = ui.viewerPanel;
@@ -882,6 +860,7 @@ function main() {
     setVolumeLoading(true);
   });
   view3D.setBackgroundColor(myState.backgroundColor);
+  view3D.setScaleBarPosition(20, 24, ViewportCorner.BOTTOM_RIGHT);
   syncColorInputsToState();
 
   view3D.setCropHandlesChangeHandler((region, committed) => {
@@ -909,17 +888,18 @@ function main() {
     }
   });
 
-  const cropHandlesToggle = document.getElementById("cropHandlesToggle") as HTMLInputElement | null;
+  const cropHandlesToggle = document.getElementById("cropHandlesToggle") as HTMLButtonElement | null;
   if (cropHandlesToggle) {
-    cropHandlesToggle.checked = cropHandlesToggleOn;
-    cropHandlesToggle.addEventListener("change", () => {
-      cropHandlesToggleOn = cropHandlesToggle.checked;
+    cropHandlesToggle.setAttribute("aria-checked", String(cropHandlesToggleOn));
+    cropHandlesToggle.addEventListener("click", () => {
+      cropHandlesToggleOn = !cropHandlesToggleOn;
+      cropHandlesToggle.setAttribute("aria-checked", String(cropHandlesToggleOn));
       updateCropHandlesEnabled();
     });
   }
 
   if (turntableParam === "true") {
-    const appLayout = document.querySelector(".flex-layout");
+    const appLayout = document.querySelector(".app");
     view3D.setAutoRotate(true);
     appLayout?.addEventListener("mouseenter", () => {
       view3D.setAutoRotate(false);
@@ -929,8 +909,7 @@ function main() {
     });
   }
 
-  const scaleError = ui.scaleError;
-  const setScaleError = (warning?: string) => setParagraphWarning(scaleError, warning);
+  const setScaleError = (warning?: string) => setUiNote(warning);
 
   const getMaxTextureEdge = (): number => {
     const probeCanvas = document.createElement("canvas");
@@ -974,64 +953,31 @@ function main() {
     });
   };
 
-  const omeZarrScaleSelect = ui.omeZarrScaleSelect;
-  omeZarrScaleSelect?.addEventListener("change", async () => {
-    const value = omeZarrScaleSelect.value;
-    if (!myState.volume) {
-      return;
-    }
-
-    setScaleError();
-
-    if (value === "auto") {
-      try {
-        await applyScaleLevel();
-      } catch (error) {
-        setScaleError(SCALE_TOO_LARGE_MESSAGE);
-      }
-    } else {
-      const level = Number(value);
-      if (!Number.isNaN(level)) {
-        if (!canLevelFitInAtlas(level)) {
-          setScaleError(SCALE_TOO_LARGE_MESSAGE);
-          try {
-            await revertScaleToAuto(omeZarrScaleSelect, applyScaleLevel);
-          } catch {
-          }
-          return;
-        }
-
-        try {
-          await applyScaleLevel(level);
-        } catch (error) {
-          setScaleError(SCALE_TOO_LARGE_MESSAGE);
-          try {
-            await revertScaleToAuto(omeZarrScaleSelect, applyScaleLevel);
-          } catch {
-          }
-        }
-      }
-    }
-  });
-
+  if (ui.omeZarrScaleSelect && ui.omeZarrScaleOptions) {
+    scaleSelectApi = setupScaleSelect({
+      button: ui.omeZarrScaleSelect,
+      optionsList: ui.omeZarrScaleOptions,
+      getVolume: () => myState.volume,
+      applyScaleLevel,
+      canLevelFitInAtlas,
+      onShowError: setScaleError,
+    });
+  }
 
   view3D.setLoadErrorHandler((_volume, error) => {
     setVolumeLoading(false);
     if (error instanceof Error && error.message === SCALE_TOO_LARGE_MESSAGE) {
       setScaleError(SCALE_TOO_LARGE_MESSAGE);
-      if (omeZarrScaleSelect) {
-        omeZarrScaleSelect.value = "auto";
-      }
+      scaleSelectApi?.setSelection("auto");
     }
   });
 
   const sourceUrlInput = ui.sourceUrlInput;
   const sourceForm = ui.sourceForm;
   const loadSourceBtn = ui.sourceLoadButton;
-  const sourceError = ui.sourceError;
   const defaultSource = TEST_DATA.zarrQimEscargot.url as string;
 
-  const setSourceError = (warning?: string) => setParagraphWarning(sourceError, warning);
+  const setSourceError = (warning?: string) => setUiNote(warning);
 
   const bindSource = (nextSource?: string): string => {
     const params = new URLSearchParams(window.location.search);
@@ -1120,7 +1066,7 @@ function main() {
   // value under the cursor, while hovering a 2D slice view (X, Y, or Z).
   const pixelInfoBox = document.createElement("div");
   Object.assign(pixelInfoBox.style, {
-    fontFamily: "monospace",
+    fontFamily: '"Geist Mono", monospace',
     position: "absolute",
     left: "50%",
     transform: "translateX(-50%)",
@@ -1128,11 +1074,13 @@ function main() {
     width: "240px",
     boxSizing: "border-box",
     padding: "6px 8px",
-    background: "rgba(0, 0, 0, 0.6)",
-    color: "white",
+    background: "rgba(255, 255, 255, 0.95)",
+    color: "#1b1c1b",
+    border: "1px solid #d9d9d3",
     fontSize: "12px",
     lineHeight: "1.4",
-    borderRadius: "4px",
+    borderRadius: "6px",
+    boxShadow: "0 8px 30px rgba(20, 24, 22, 0.10), 0 1px 2px rgba(20, 24, 22, 0.08)",
     pointerEvents: "none",
     whiteSpace: "pre",
     textAlign: "center",
@@ -1182,7 +1130,6 @@ function main() {
   bindPrimaryViewControls({
     state: myState,
     view3D,
-    setActiveSliceMode,
   });
 
   setupRangeFillSync();
@@ -1215,24 +1162,27 @@ function main() {
 
   histogramController = createHistogramController({
     canvas: ui.histogramCanvas,
+    minTag: ui.histogramMinTag,
+    maxTag: ui.histogramMaxTag,
     selection: histogramSelection,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
-    getColormapName: () => myState.colormap,
-    getColormapMin: () => myState.colormapMin,
-    getColormapMax: () => myState.colormapMax,
-    getColormapInverted: () => myState.colormapInverted,
     onLutUpdated: (volume, channelIndex) => {
       applyColormapToChannel(volume, channelIndex);
     },
   });
   histogramController.setupInteractions();
 
-  ["X", "Y", "Z", "ORTHO", "3D"].forEach((mode) => {
-    document.getElementById(mode)?.addEventListener("click", () => {
-      histogramController?.applyHistogramLutFromBins(0);
+  if (ui.viewSegmented) {
+    setupViewMode({
+      segmented: ui.viewSegmented,
+      view3D,
+      onModeChange: (mode) => {
+        setActiveSliceMode(mode);
+        histogramController?.applyHistogramLutFromBins(0);
+      },
     });
-  });
+  }
 
   colormapController = createColormapController({
     state: myState,
@@ -1245,11 +1195,45 @@ function main() {
   });
   colormapController.setupColorizeControls();
   colormapController.setupColormapRangeControls();
+  colormapController.setupColormapChipControl();
   colormapController.setupColormapInvertControl();
 
   setupCropControls();
   setupSliceSelectorControls();
   setupGui(el);
+
+  if (ui.panelLeft && ui.panelLeftHeader && ui.panelLeftCollapse && ui.panelRight && ui.panelRightHeader && ui.panelRightCollapse) {
+    setupPanelCollapse({
+      left: {
+        panel: ui.panelLeft,
+        header: ui.panelLeftHeader,
+        collapseButton: ui.panelLeftCollapse,
+        openChevronPath: "M10 3 L5 8 l5 5",
+        collapsedChevronPath: "M6 3 l5 5 -5 5",
+        collapseLabel: "Collapse view and crop panel",
+        expandLabel: "Expand view and crop panel",
+      },
+      right: {
+        panel: ui.panelRight,
+        header: ui.panelRightHeader,
+        collapseButton: ui.panelRightCollapse,
+        openChevronPath: "M6 3 l5 5 -5 5",
+        collapsedChevronPath: "M10 3 L5 8 l5 5",
+        collapseLabel: "Collapse appearance panel",
+        expandLabel: "Expand appearance panel",
+      },
+    });
+  }
+
+  if (ui.exportButton && ui.exportMenu && ui.menuScrim) {
+    setupExportMenu({
+      button: ui.exportButton,
+      menu: ui.exportMenu,
+      scrim: ui.menuScrim,
+      onView3D: () => view3D,
+      onShowNote: setUiNote,
+    });
+  }
 
   void loadFromCurrentSource(true);
 }
