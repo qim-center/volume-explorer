@@ -101,9 +101,12 @@ button { font-family: inherit; cursor: pointer; }
 .ghost:hover svg { opacity: 1; }
 
 /* collapsed card = its own header strip: width shrinks to content, body hidden */
-.panel.is-collapsed { width: auto; }
+.panel.is-collapsed { width: auto; height: var(--panel-header-h); }
 .panel.is-collapsed .panel__body { display: none; }
-.panel.is-collapsed .panel__header { height: 100%; border-bottom: 0; cursor: pointer; gap: 12px; }
+.panel.is-collapsed .panel__header { height: var(--panel-header-h); border-bottom: 0; cursor: pointer; gap: 12px; }
+.panel.is-animating { transition: width .22s cubic-bezier(.4, 0, .2, 1), height .22s cubic-bezier(.4, 0, .2, 1); }
+.panel.is-animating .panel__header { transition: height .22s cubic-bezier(.4, 0, .2, 1); }
+.panel.is-animating .panel__body { opacity: 1; }
 
 .panel__body { padding: var(--panel-pad); display: flex; flex-direction: column; gap: var(--panel-gap); }
 .section { display: flex; flex-direction: column; }
@@ -239,15 +242,24 @@ button { font-family: inherit; cursor: pointer; }
 .menu__sep { height: 1px; margin: 6px 0; background: var(--divider); }
 
 /* ---------- error note (below the top bar, only while an error is set) ---------- */
-/* error message = small centered modal */
+/* error message = small centered modal, slides up from below */
 .error-note { position: fixed; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: min(360px, calc(100vw - 40px)); padding: 20px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-card);
-  font-size: 13px; color: var(--ink); line-height: 1.5; }
-.error-note p { margin: 0 0 16px; }
-.error-note__close { display: block; margin-left: auto; padding: 7px 14px; border: 0; border-radius: var(--r-control);
-  background: var(--accent); color: #fff; font: 500 12px var(--font); }
-.error-note__close:hover { filter: brightness(0.92); }
+  font-size: 13px; color: var(--ink); line-height: 1.5; overflow: hidden; animation: error-note-in .3s ease-in both; }
+.error-note__banner { display: flex; align-items: center; justify-content: space-between;
+  margin: -20px -20px 12px; padding: 10px 8px 10px 20px; background: #fbe9e7; }
+.error-note__title { font-weight: 600; color: #b3261e; }
+.error-note__body { padding-bottom: 2px; }
+.error-note p { margin: 0; }
+@keyframes error-note-in {
+  from { transform: translate(-50%, calc(-50% + 28px)); opacity: 0; }
+  to { transform: translate(-50%, -50%); opacity: 1; }
+}
+.error-note__close { width: 24px; height: 24px; padding: 0; flex: none;
+  border: 0; border-radius: var(--r-control); background: none; color: #b3261e;
+  display: flex; align-items: center; justify-content: center; }
+.error-note__close:hover { background: rgba(179, 38, 30, 0.12); }
 
 /* ---------- loading overlay (covers the render, under the floating cards) ---------- */
 .volume-loading-overlay { position: absolute; inset: 0; z-index: 0; display: none;
