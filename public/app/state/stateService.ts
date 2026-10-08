@@ -16,6 +16,9 @@ export interface HistogramSelection {
 
 export const CROP_AXES: CropAxis[] = ["x", "y", "z"];
 
+// where along the colormap (0 = start, 1 = end) to sample the dynamic --accent color from
+export const ACCENT_COLORMAP_POSITION = 0.85;
+
 export const cropAxisStateKeys: Record<CropAxis, { min: CropStateKey; max: CropStateKey }> = {
   x: { min: "cropXmin", max: "cropXmax" },
   y: { min: "cropYmin", max: "cropYmax" },

@@ -2,6 +2,7 @@ import { Color } from "three";
 import { View3d, Volume, ColorizeFeature, LUT_ENTRIES } from "../../../src";
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "../../colorizer";
 import { createDualSlider, DualSlider } from "../ui/dualSlider";
+import { ACCENT_COLORMAP_POSITION } from "../state/stateService";
 
 const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
 
@@ -168,13 +169,32 @@ export function createColormapController(options: ColormapControllerOptions) {
     return state.colormapInverted ? [...colormap.stops].reverse() : colormap.stops;
   };
 
+  const applyColormapAccent = (stops: string[] | null): void => {
+    if (!stops || stops.length === 0) {
+      return;
+    }
+    const [r, g, b] = sampleColormapStops(stops.map((stop) => new Color(stop)), ACCENT_COLORMAP_POSITION);
+    // rewrite the single --accent source; the whole UI (and the histogram canvas) pick it up
+    document.documentElement.style.setProperty("--accent", `rgb(${r}, ${g}, ${b})`);
+  };
+
   const syncColormapChip = (): void => {
-    const chip = document.getElementById("colormap-chip") as HTMLButtonElement | null;
     const stops = getOrderedColormapStops(state.colormap);
-    if (chip && stops) {
-      chip.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+    const gradient = stops ? `linear-gradient(to right, ${stops.join(", ")})` : null;
+    const chip = document.getElementById("colormap-chip") as HTMLButtonElement | null;
+    if (chip) {
+      if (gradient) {
+        chip.style.background = gradient;
+      }
       chip.title = state.colormap;
     }
+    if (gradient) {
+      // keep the range slider fill in step with the active colormap
+      const rangeFill = document.getElementById("colormap-range-fill") as HTMLElement | null;
+      rangeFill?.style.setProperty("background", gradient);
+    }
+    // make the app accent follow the middle of the active colormap
+    applyColormapAccent(stops);
   };
 
   const syncColormapPickerSelection = (picker: HTMLElement): void => {
