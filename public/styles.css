@@ -110,6 +110,9 @@ button { font-family: inherit; cursor: pointer; }
 .divider { height: 1px; background: var(--divider); flex: none; }
 .hidden { display: none !important; }
 
+/* the `hidden` attribute is overridden by author `display` rules (e.g. .colormap-picker { display: grid }) */
+.colormap-picker[hidden], .select__options[hidden], .menu[hidden], .menu-scrim[hidden], .row[hidden] { display: none; }
+
 /* collapsed panel = the header strip alone, same look, chevron flipped */
 .panel-tab { position: absolute; z-index: 1; top: var(--panel-top); height: var(--panel-header-h); padding: 0 6px 0 20px;
   display: flex; align-items: center; gap: 12px; border: 0; }
@@ -165,14 +168,15 @@ button { font-family: inherit; cursor: pointer; }
 .toggle[aria-checked="true"]::after { left: 18px; }
 
 /* ---------- colormap block ---------- */
-.colormap-head { display: flex; align-items: center; gap: 8px; }
+.colormap-head { position: relative; display: flex; align-items: center; gap: 8px; }
 .colormap-chip { width: 60px; height: 10px; border: 0; border-radius: 5px; background: var(--colormap); padding: 0; }
 .colormap-chip__chevron { color: var(--label); display: inline-flex; }
 
-.colormap-picker { position: absolute; z-index: 7; margin-top: 4px; padding: 6px;
+/* floating picker anchored below the header row (right-aligned to the Invert button) */
+.colormap-picker { position: absolute; z-index: 7; top: calc(100% + 6px); right: 0; width: 272px; padding: 8px;
   background: var(--surface); border: 1px solid var(--menu-border); border-radius: var(--r-card);
-  box-shadow: var(--shadow-card); display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.colormap-picker__option { height: 18px; border-radius: 4px; border: 1px solid var(--menu-border); padding: 0; }
+  box-shadow: var(--shadow-card); display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.colormap-picker__option { height: 24px; border-radius: 4px; border: 1px solid var(--menu-border); padding: 0; cursor: pointer; }
 .colormap-picker__option:hover, .colormap-picker__option:focus-visible { border-color: var(--accent); }
 .colormap-picker__option[aria-selected="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
 
