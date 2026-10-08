@@ -1,7 +1,7 @@
 import { Color } from "three";
 import { View3d, Volume, ColorizeFeature, LUT_ENTRIES } from "../../../src";
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "../../colorizer";
-import { clamp01 } from "../utils/math";
+import { createDualSlider, DualSlider } from "../ui/dualSlider";
 
 const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
 
@@ -160,56 +160,61 @@ export function createColormapController(options: ColormapControllerOptions) {
     }
   };
 
-  const syncSelectedColormapSwatch = (colormapPicker: HTMLElement, colormapPreview: HTMLElement | null): void => {
-    const swatches = colormapPicker.querySelectorAll<HTMLButtonElement>(".colormap-swatch");
-    for (const swatch of swatches) {
-      const name = swatch.dataset.colormapName;
-      swatch.classList.toggle("is-selected", name === state.colormap);
-      const swatchColormap = name ? colorizercolormaps[name] : undefined;
-      if (swatchColormap) {
-        const swatchStops = state.colormapInverted ? [...swatchColormap.stops].reverse() : swatchColormap.stops;
-        swatch.style.background = `linear-gradient(to right, ${swatchStops.join(", ")})`;
-      }
+  const getOrderedColormapStops = (colormapName: string): string[] | null => {
+    const colormap = colorizercolormaps[colormapName];
+    if (!colormap || !colormap.stops) {
+      return null;
     }
+    return state.colormapInverted ? [...colormap.stops].reverse() : colormap.stops;
+  };
 
-    if (colormapPreview && colorizercolormaps[state.colormap]) {
-      const stops = colorizercolormaps[state.colormap].stops;
-      const orderedStops = state.colormapInverted ? [...stops].reverse() : stops;
-      colormapPreview.style.background = `linear-gradient(to right, ${orderedStops.join(", ")})`;
-      colormapPreview.title = state.colormap;
+  const syncColormapChip = (): void => {
+    const chip = document.getElementById("colormap-chip") as HTMLButtonElement | null;
+    const stops = getOrderedColormapStops(state.colormap);
+    if (chip && stops) {
+      chip.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+      chip.title = state.colormap;
     }
   };
 
-  const buildColormapPicker = (
-    colormapPicker: HTMLElement,
-    colormapPreview: HTMLElement | null,
-    colormapDropdown: HTMLDetailsElement | null
-  ): void => {
-    const colormapNames = Object.keys(colorizercolormaps);
-    colormapPicker.innerHTML = "";
-
-    if (colormapNames.length === 0) {
-      return;
+  const syncColormapPickerSelection = (picker: HTMLElement): void => {
+    const options = picker.querySelectorAll<HTMLButtonElement>(".colormap-picker__option");
+    for (const option of options) {
+      option.setAttribute("aria-selected", String(option.dataset.colormapName === state.colormap));
     }
+  };
+
+  const buildColormapPicker = (picker: HTMLElement, chip: HTMLButtonElement | null): { closePicker: () => void } => {
+    const closePicker = (): void => {
+      picker.hidden = true;
+      chip?.setAttribute("aria-expanded", "false");
+    };
+
+    const colormapNames = Object.keys(colorizercolormaps);
+    picker.innerHTML = "";
 
     if (!colorizercolormaps[state.colormap]) {
-      state.colormap = colormapNames[0];
+      state.colormap = colormapNames[0] ?? "viridis";
     }
 
     for (const colormapName of colormapNames) {
-      const swatch = document.createElement("button");
-      swatch.type = "button";
-      swatch.className = "colormap-swatch";
-      swatch.dataset.colormapName = colormapName;
-      swatch.setAttribute("aria-label", `Select ${colormapName} colormap`);
-      swatch.title = colormapName;
-      swatch.addEventListener("click", () => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "colormap-picker__option";
+      option.dataset.colormapName = colormapName;
+      option.setAttribute("aria-label", `Select ${colormapName} colormap`);
+      option.title = colormapName;
+      const stops = getOrderedColormapStops(colormapName);
+      if (stops) {
+        option.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+      }
+      option.addEventListener("click", () => {
+        closePicker();
         if (state.colormap === colormapName) {
-          colormapDropdown?.removeAttribute("open");
           return;
         }
         state.colormap = colormapName;
-        syncSelectedColormapSwatch(colormapPicker, colormapPreview);
+        syncColormapChip();
         const volume = getVolume();
         const view3D = getView3D();
         applyColormapToVolume(volume);
@@ -217,187 +222,92 @@ export function createColormapController(options: ColormapControllerOptions) {
         view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
         view3D.redraw();
         setColormapInUrl(colormapName);
-        colormapDropdown?.removeAttribute("open");
       });
-      colormapPicker.appendChild(swatch);
+      picker.appendChild(option);
     }
 
-    syncSelectedColormapSwatch(colormapPicker, colormapPreview);
+    syncColormapPickerSelection(picker);
+    return { closePicker };
   };
 
-  const setupColorizeControls = (): void => {
-    const colorizeButton = document.getElementById("colorize") as HTMLButtonElement;
-    const colormapPicker = document.getElementById("colormap-picker") as HTMLElement | null;
-    const colormapPreview = document.getElementById("colormap-dropdown-preview") as HTMLElement | null;
-    const colormapDropdown = document.getElementById("colormap-dropdown") as HTMLDetailsElement | null;
+  let colormapRangeSlider: DualSlider | null = null;
 
-    if (colormapPicker) {
-      buildColormapPicker(colormapPicker, colormapPreview, colormapDropdown);
-    }
+  const syncColormapRangeUI = (): void => {
+    colormapRangeSlider?.set(state.colormapMin, state.colormapMax);
+    const values = document.getElementById("colormap-range-values") as HTMLElement | null;
+    values?.replaceChildren(`${Math.round(state.colormapMin)} – ${Math.round(state.colormapMax)}`);
+  };
 
-    const view3D = getView3D();
+  const applyColormapRange = (minValue: number, maxValue: number): void => {
+    state.colormapMin = Math.round(minValue);
+    state.colormapMax = Math.round(maxValue);
+    syncColormapRangeUI();
     const volume = getVolume();
-
-    colorizeButton?.addEventListener("click", () => {
-      state.colorizeEnabled = !state.colorizeEnabled;
-      view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
-    });
-
-    const segChannelInput = document.getElementById("segchannel") as HTMLInputElement;
-    segChannelInput?.addEventListener("change", () => {
-      const channelIndex = Number(segChannelInput.value);
-      state.colorizeChannel = channelIndex;
-      view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
-    });
-
-    const featureInput = document.getElementById("feature") as HTMLSelectElement;
-    featureInput?.addEventListener("change", () => {
-      const feature = featureInput.value;
-      state.feature = feature;
-      view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
-    });
-
-    const featureMinInput = document.getElementById("featmin") as HTMLInputElement;
-    featureMinInput?.addEventListener("change", () => {
-      const featureMin = Number(featureMinInput.value) / 100.0;
-      console.log("featureMin: " + featureMin);
-      state.featureMin = featureMin;
-      view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
-    });
-
-    const featureMaxInput = document.getElementById("featmax") as HTMLInputElement;
-    featureMaxInput?.addEventListener("change", () => {
-      const featureMax = Number(featureMaxInput.value) / 100.0;
-      console.log("featureMax: " + featureMax);
-      state.featureMax = featureMax;
-      view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
-    });
-  };
-
-  const syncColormapRangeFill = (minInput: HTMLInputElement, maxInput: HTMLInputElement, fill: HTMLElement): void => {
-    const minVal = Number(minInput.value);
-    const maxVal = Number(maxInput.value);
-    fill.style.left = `${(minVal / 255) * 100}%`;
-    fill.style.right = `${(1 - maxVal / 255) * 100}%`;
+    if (volume) {
+      applyColormapToVolume(volume);
+    }
+    onColormapChange?.();
   };
 
   const setupColormapRangeControls = (): void => {
-    const minInput = document.getElementById("colormap-range-min") as HTMLInputElement | null;
-    const maxInput = document.getElementById("colormap-range-max") as HTMLInputElement | null;
-    const fill = document.getElementById("colormap-range-fill") as HTMLElement | null;
-    if (!minInput || !maxInput || !fill) {
+    const rangeHost = document.getElementById("colormap-range") as HTMLElement | null;
+    if (!rangeHost) {
       return;
     }
 
-    minInput.value = String(state.colormapMin);
-    maxInput.value = String(state.colormapMax);
-    syncColormapRangeFill(minInput, maxInput, fill);
+    colormapRangeSlider = createDualSlider({
+      host: rangeHost,
+      min: 0,
+      max: 255,
+      onChange: (minValue, maxValue) => {
+        state.colormapMin = Math.round(minValue);
+        state.colormapMax = Math.round(maxValue);
+        const values = document.getElementById("colormap-range-values") as HTMLElement | null;
+        values?.replaceChildren(`${state.colormapMin} – ${state.colormapMax}`);
+      },
+    });
 
-    const applyRange = (min: number, max: number) => {
-      const nextMin = Math.round(min);
-      const nextMax = Math.round(max);
-      state.colormapMin = nextMin;
-      state.colormapMax = nextMax;
-      minInput.value = String(nextMin);
-      maxInput.value = String(nextMax);
-      syncColormapRangeFill(minInput, maxInput, fill);
-      const volume = getVolume();
-      if (volume) {
-        applyColormapToVolume(volume);
-      }
-      onColormapChange?.();
-    };
+    rangeHost.addEventListener("pointerup", () => {
+      applyColormapRange(state.colormapMin, state.colormapMax);
+    });
+    rangeHost.addEventListener("pointercancel", () => {
+      applyColormapRange(state.colormapMin, state.colormapMax);
+    });
 
-    const onMinInput = () => {
-      const b = Number(minInput.value);
-      if (b > Number(maxInput.value)) {
-        applyRange(b, b);
-      } else {
-        applyRange(b, state.colormapMax);
-      }
-    };
+    syncColormapRangeUI();
+  };
 
-    const onMaxInput = () => {
-      const b = Number(maxInput.value);
-      if (b < Number(minInput.value)) {
-        applyRange(b, b);
-      } else {
-        applyRange(state.colormapMin, b);
-      }
-    };
+  const setupColormapChipControl = (): void => {
+    const chip = document.getElementById("colormap-chip") as HTMLButtonElement | null;
+    const picker = document.getElementById("colormap-picker") as HTMLElement | null;
 
-    minInput.addEventListener("input", onMinInput);
-    maxInput.addEventListener("input", onMaxInput);
-
-    const mergedSlider = minInput.closest(".crop-merged-slider") as HTMLElement | null;
-    if (!mergedSlider) {
+    if (!chip || !picker) {
       return;
     }
 
-    const rangeMin = Number(minInput.min) || 0;
-    const rangeMax = Number(maxInput.max) || 255;
-    const rangeSpan = rangeMax - rangeMin;
+    const { closePicker } = buildColormapPicker(picker, chip);
 
-    let activeHandle: "min" | "max" | null = null;
+    syncColormapChip();
 
-    const valueAtClientX = (clientX: number): number | null => {
-      const rect = mergedSlider.getBoundingClientRect();
-      if (rect.width <= 0) {
-        return null;
-      }
-      const normalized = clamp01((clientX - rect.left) / rect.width);
-      return rangeMin + normalized * rangeSpan;
-    };
-
-    const updateFromClientX = (clientX: number, handle: "min" | "max") => {
-      const value = valueAtClientX(clientX);
-      if (value === null) {
+    chip.addEventListener("click", () => {
+      const isExpanded = chip.getAttribute("aria-expanded") === "true";
+      if (isExpanded) {
+        closePicker();
         return;
       }
-      if (handle === "min") {
-        applyRange(Math.min(value, state.colormapMax), state.colormapMax);
-      } else {
-        applyRange(state.colormapMin, Math.max(value, state.colormapMin));
-      }
-    };
+      picker.hidden = false;
+      chip.setAttribute("aria-expanded", "true");
+      syncColormapPickerSelection(picker);
 
-    mergedSlider.addEventListener("pointerdown", (event: PointerEvent) => {
-      const target = event.target as HTMLElement;
-      if (target === minInput || target === maxInput) {
-        return;
-      }
-      const value = valueAtClientX(event.clientX);
-      if (value === null) {
-        return;
-      }
-      const minDistance = Math.abs(value - state.colormapMin);
-      const maxDistance = Math.abs(value - state.colormapMax);
-      activeHandle = minDistance <= maxDistance ? "min" : "max";
-      updateFromClientX(event.clientX, activeHandle);
-      mergedSlider.setPointerCapture(event.pointerId);
-      event.preventDefault();
+      const dismiss = (event: Event) => {
+        if (picker.contains(event.target as Node) || chip.contains(event.target as Node)) {
+          return;
+        }
+        closePicker();
+        window.removeEventListener("pointerdown", dismiss, true);
+      };
+      window.addEventListener("pointerdown", dismiss, true);
     });
-
-    mergedSlider.addEventListener("pointermove", (event: PointerEvent) => {
-      if (!activeHandle) {
-        return;
-      }
-      updateFromClientX(event.clientX, activeHandle);
-      event.preventDefault();
-    });
-
-    const stopDrag = (event: PointerEvent) => {
-      if (!activeHandle) {
-        return;
-      }
-      activeHandle = null;
-      if (mergedSlider.hasPointerCapture(event.pointerId)) {
-        mergedSlider.releasePointerCapture(event.pointerId);
-      }
-    };
-
-    mergedSlider.addEventListener("pointerup", stopDrag);
-    mergedSlider.addEventListener("pointercancel", stopDrag);
   };
 
   const setupColormapInvertControl = (): void => {
@@ -415,11 +325,18 @@ export function createColormapController(options: ColormapControllerOptions) {
     invertToggle.addEventListener("click", () => {
       state.colormapInverted = !state.colormapInverted;
       syncInvertButton();
+      syncColormapChip();
 
-      const colormapPicker = document.getElementById("colormap-picker") as HTMLElement | null;
-      const colormapPreview = document.getElementById("colormap-dropdown-preview") as HTMLElement | null;
-      if (colormapPicker) {
-        syncSelectedColormapSwatch(colormapPicker, colormapPreview);
+      const picker = document.getElementById("colormap-picker") as HTMLElement | null;
+      if (picker) {
+        syncColormapPickerSelection(picker);
+        const options = picker.querySelectorAll<HTMLButtonElement>(".colormap-picker__option");
+        for (const option of options) {
+          const stops = getOrderedColormapStops(option.dataset.colormapName ?? "");
+          if (stops) {
+            option.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+          }
+        }
       }
 
       const volume = getVolume();
@@ -430,6 +347,44 @@ export function createColormapController(options: ColormapControllerOptions) {
     });
   };
 
+  const setupColorizeControls = (): void => {
+    const view3D = getView3D();
+
+    const colorizeButton = document.getElementById("colorize") as HTMLButtonElement;
+    colorizeButton?.addEventListener("click", () => {
+      state.colorizeEnabled = !state.colorizeEnabled;
+      view3D.setChannelColorizeFeature(getVolume(), state.colorizeChannel, getStateColorizeFeature());
+    });
+
+    const segChannelInput = document.getElementById("segchannel") as HTMLInputElement;
+    segChannelInput?.addEventListener("change", () => {
+      const channelIndex = Number(segChannelInput.value);
+      state.colorizeChannel = channelIndex;
+      view3D.setChannelColorizeFeature(getVolume(), state.colorizeChannel, getStateColorizeFeature());
+    });
+
+    const featureInput = document.getElementById("feature") as HTMLSelectElement;
+    featureInput?.addEventListener("change", () => {
+      const feature = featureInput.value;
+      state.feature = feature;
+      view3D.setChannelColorizeFeature(getVolume(), state.colorizeChannel, getStateColorizeFeature());
+    });
+
+    const featureMinInput = document.getElementById("featmin") as HTMLInputElement;
+    featureMinInput?.addEventListener("change", () => {
+      const featureMin = Number(featureMinInput.value) / 100.0;
+      state.featureMin = featureMin;
+      view3D.setChannelColorizeFeature(getVolume(), state.colorizeChannel, getStateColorizeFeature());
+    });
+
+    const featureMaxInput = document.getElementById("featmax") as HTMLInputElement;
+    featureMaxInput?.addEventListener("change", () => {
+      const featureMax = Number(featureMaxInput.value) / 100.0;
+      state.featureMax = featureMax;
+      view3D.setChannelColorizeFeature(getVolume(), state.colorizeChannel, getStateColorizeFeature());
+    });
+  };
+
   return {
     applyColormapToChannel,
     applyColormapToVolume,
@@ -437,6 +392,7 @@ export function createColormapController(options: ColormapControllerOptions) {
     setColormapInUrl,
     setupColorizeControls,
     setupColormapRangeControls,
+    setupColormapChipControl,
     setupColormapInvertControl,
   };
 }

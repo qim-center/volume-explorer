@@ -34,7 +34,8 @@ export const DEFAULT_TEST_DATA: Record<string, TestDataSpec> = {
 };
 
 const DEFAULT_COLORS = {
-  background: [0.9, 0.9, 0.9] as [number, number, number],
+  // #e6e6e6 — must match --viewport-bg in styles.css
+  background: [0.902, 0.902, 0.902] as [number, number, number],
   boundingBox: [0.3, 0.3, 0.3] as [number, number, number],
 };
 
@@ -103,7 +104,7 @@ export function createInitialState(): State {
 
     showScaleBar: true,
 
-    showBoundingBox: false,
+    showBoundingBox: true,
     boundingBoxColor: DEFAULT_COLORS.boundingBox,
     backgroundColor: DEFAULT_COLORS.background,
     flipX: 1,

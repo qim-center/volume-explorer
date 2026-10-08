@@ -1,7 +1,7 @@
 import { Volume, View3d } from "../../../src";
 import { State } from "../../types";
 import { CameraMode, CROP_AXES, CropAxis, cropAxisStateKeys } from "../state/stateService";
-import { clamp01 } from "../utils/math";
+import { createDualSlider, DualSlider } from "../ui/dualSlider";
 
 interface CropSliceManagerOptions {
   state: State;
@@ -26,6 +26,8 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     y: 0,
     z: 0,
   };
+
+  const cropSliders: Partial<Record<CropAxis, DualSlider>> = {};
 
   function setSliceIndexForAxis(axis: CropAxis, sliceIndex: number) {
     if (axis === "z") {
@@ -128,8 +130,52 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     return getStateAxisCropBounds(axis);
   }
 
+  function setUiSectionDisabled(section: HTMLElement | null, isDisabled: boolean) {
+    if (!section) {
+      return;
+    }
+    section.classList.toggle("is-disabled", isDisabled);
+    section.setAttribute("aria-disabled", isDisabled ? "true" : "false");
+  }
+
+  function setCropAxisControlsDisabled(axis: CropAxis, isDisabled: boolean) {
+    const row = document.getElementById(`crop-row-${axis}`) as HTMLElement | null;
+    setUiSectionDisabled(row, isDisabled);
+
+    for (const id of [`crop-${axis}-left`, `crop-${axis}-right`]) {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      if (input) {
+        input.disabled = isDisabled;
+      }
+    }
+
+    const slider = row?.querySelector(".slider") as HTMLElement | null;
+    slider?.classList.toggle("is-disabled", isDisabled);
+  }
+
+  function updateSliceModeControlStates() {
+    const isSliceMode = activeSliceAxis !== null || isMultiSliceMode;
+
+    for (const axis of CROP_AXES) {
+      setCropAxisControlsDisabled(axis, activeSliceAxis === axis);
+    }
+
+    const opacityRow = document.getElementById("opacity-row") as HTMLElement | null;
+    setUiSectionDisabled(opacityRow, isSliceMode);
+
+    const globalOpacitySlider = document.getElementById("global-opacity-slider") as HTMLInputElement | null;
+    if (globalOpacitySlider) {
+      globalOpacitySlider.disabled = isSliceMode;
+    }
+
+    const globalOpacityInput = document.getElementById("global-opacity-input") as HTMLInputElement | null;
+    if (globalOpacityInput) {
+      globalOpacityInput.disabled = isSliceMode;
+    }
+  }
+
   function updateSliceViewCurrentLabel() {
-    const currentLabel = document.getElementById("slice-view-current") as HTMLSpanElement | null;
+    const currentLabel = document.getElementById("slice-position-readout") as HTMLElement | null;
     if (!currentLabel) {
       return;
     }
@@ -148,86 +194,59 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     currentLabel.textContent = `${axisUpper}:${sliceIndexByAxis[activeSliceAxis]}`;
   }
 
-  function setUiSectionDisabled(section: HTMLElement | null, isDisabled: boolean) {
-    if (!section) {
+  function updateSingleSliceUI(axis: CropAxis): void {
+    const slider = document.getElementById("slice-single-slider") as HTMLInputElement | null;
+    if (!slider) {
       return;
     }
-    section.classList.toggle("is-disabled", isDisabled);
-    section.setAttribute("aria-disabled", isDisabled ? "true" : "false");
+
+    const axisLetter = document.getElementById("slice-single-axis") as HTMLElement | null;
+    const axisValue = document.getElementById("slice-single-value") as HTMLElement | null;
+
+    const maxIndex = getAxisMaxSliceIndex(axis);
+    const nextValue = clampSliceIndex(axis, sliceIndexByAxis[axis]);
+    sliceIndexByAxis[axis] = nextValue;
+
+    axisLetter?.replaceChildren(axis.toUpperCase());
+    axisValue?.replaceChildren(String(nextValue));
+    slider.min = "0";
+    slider.max = `${maxIndex}`;
+    slider.value = `${nextValue}`;
   }
 
-  function setCropAxisControlsDisabled(axis: CropAxis, isDisabled: boolean) {
-    const row = document.getElementById(`crop-row-${axis}`) as HTMLElement | null;
-    setUiSectionDisabled(row, isDisabled);
-
-    const inputIds = [`crop-${axis}-min`, `crop-${axis}-max`, `crop-${axis}-left`, `crop-${axis}-right`];
-    for (const id of inputIds) {
-      const input = document.getElementById(id) as HTMLInputElement | null;
-      if (input) {
-        input.disabled = isDisabled;
-      }
-    }
-
-    const mergedSlider = row?.querySelector(".crop-merged-slider") as HTMLElement | null;
-    mergedSlider?.classList.toggle("is-disabled", isDisabled);
-  }
-
-  function updateSliceModeControlStates() {
-    const isSliceMode = activeSliceAxis !== null || isMultiSliceMode;
-
+  function updateMultiSliceUI(): void {
     for (const axis of CROP_AXES) {
-      setCropAxisControlsDisabled(axis, activeSliceAxis === axis);
-    }
+      const sliderEl = document.getElementById(`slice-${axis}-slider`) as HTMLInputElement | null;
+      const valueEl = document.getElementById(`slice-${axis}-value`) as HTMLElement | null;
+      if (!sliderEl) {
+        continue;
+      }
 
-    const globalOpacitySlider = document.getElementById("global-opacity-slider") as HTMLInputElement | null;
-    if (globalOpacitySlider) {
-      globalOpacitySlider.disabled = isSliceMode;
-    }
+      const maxIndex = getAxisMaxSliceIndex(axis);
+      const nextValue = clampSliceIndex(axis, sliceIndexByAxis[axis]);
+      sliceIndexByAxis[axis] = nextValue;
 
-    const globalOpacityInput = document.getElementById("global-opacity-input") as HTMLInputElement | null;
-    if (globalOpacityInput) {
-      globalOpacityInput.disabled = isSliceMode;
+      valueEl?.replaceChildren(String(nextValue));
+      sliderEl.min = "0";
+      sliderEl.max = `${maxIndex}`;
+      sliderEl.value = `${nextValue}`;
     }
-
-    const globalOpacitySection = globalOpacitySlider?.closest(".controls-item") as HTMLElement | null;
-    setUiSectionDisabled(globalOpacitySection, isSliceMode);
   }
 
   function updateSliceSelectorUI() {
-    const panel = document.getElementById("slice-selector-panel") as HTMLElement | null;
-    const panel3d = document.getElementById("slice-selector-3d-panel") as HTMLElement | null;
-    const axisLabel = document.getElementById("slice-selector-axis") as HTMLLabelElement | null;
-    const minLabel = document.getElementById("slice-selector-min") as HTMLSpanElement | null;
-    const maxLabel = document.getElementById("slice-selector-max") as HTMLSpanElement | null;
-    const slider = document.getElementById("slice-selector-slider") as HTMLInputElement | null;
+    const section = document.getElementById("slice-position-section") as HTMLElement | null;
+    const divider = document.getElementById("slice-divider") as HTMLElement | null;
+    const singleRow = document.getElementById("slice-single-row") as HTMLElement | null;
+    const multiRows = document.getElementById("slice-ortho-rows") as HTMLElement | null;
 
-    const canShowSingle = !!panel && !!axisLabel && !!minLabel && !!maxLabel && !!slider;
+    const isSliceMode = activeSliceAxis !== null || isMultiSliceMode;
+    section?.classList.toggle("hidden", !isSliceMode);
+    divider?.classList.toggle("hidden", !isSliceMode);
 
     if (isMultiSliceMode) {
-      panel?.classList.add("hidden");
-      if (panel3d) {
-        panel3d.classList.remove("hidden");
-      }
-
-      for (const axis of CROP_AXES) {
-        const sliderEl = document.getElementById(`slice-selector-${axis}-slider`) as HTMLInputElement | null;
-        const minEl = document.getElementById(`slice-selector-${axis}-min`) as HTMLSpanElement | null;
-        const maxEl = document.getElementById(`slice-selector-${axis}-max`) as HTMLSpanElement | null;
-        if (!sliderEl || !minEl || !maxEl) {
-          continue;
-        }
-
-        const maxIndex = getAxisMaxSliceIndex(axis);
-        const nextValue = clampSliceIndex(axis, sliceIndexByAxis[axis]);
-        sliceIndexByAxis[axis] = nextValue;
-
-        minEl.textContent = "0";
-        maxEl.textContent = `${maxIndex}`;
-        sliderEl.min = "0";
-        sliderEl.max = `${maxIndex}`;
-        sliderEl.value = `${nextValue}`;
-      }
-
+      singleRow?.classList.add("hidden");
+      multiRows?.classList.remove("hidden");
+      updateMultiSliceUI();
       updateSliceViewCurrentLabel();
       updateSliceModeControlStates();
       for (const axis of CROP_AXES) {
@@ -236,31 +255,17 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
       return;
     }
 
-    if (panel3d) {
-      panel3d.classList.add("hidden");
-    }
+    multiRows?.classList.add("hidden");
 
-    if (!activeSliceAxis || !canShowSingle) {
-      panel?.classList.add("hidden");
+    if (!activeSliceAxis) {
+      singleRow?.classList.add("hidden");
       updateSliceViewCurrentLabel();
       updateSliceModeControlStates();
       return;
     }
 
-    panel.classList.remove("hidden");
-
-    const axisUpper = activeSliceAxis.toUpperCase();
-    const maxIndex = getAxisMaxSliceIndex(activeSliceAxis);
-    const nextValue = clampSliceIndex(activeSliceAxis, sliceIndexByAxis[activeSliceAxis]);
-    sliceIndexByAxis[activeSliceAxis] = nextValue;
-
-    axisLabel.textContent = axisUpper;
-    minLabel.textContent = "0";
-    maxLabel.textContent = `${maxIndex}`;
-    slider.min = "0";
-    slider.max = `${maxIndex}`;
-    slider.value = `${nextValue}`;
-
+    singleRow?.classList.remove("hidden");
+    updateSingleSliceUI(activeSliceAxis);
     updateSliceViewCurrentLabel();
     updateSliceModeControlStates();
   }
@@ -273,13 +278,13 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
   }
 
   function setupSliceSelectorControls() {
-    const slider = document.getElementById("slice-selector-slider") as HTMLInputElement | null;
-    slider?.addEventListener("input", () => {
+    const singleSlider = document.getElementById("slice-single-slider") as HTMLInputElement | null;
+    singleSlider?.addEventListener("input", () => {
       if (!activeSliceAxis) {
         return;
       }
 
-      const nextSliceIndex = clampSliceIndex(activeSliceAxis, slider.valueAsNumber);
+      const nextSliceIndex = clampSliceIndex(activeSliceAxis, singleSlider.valueAsNumber);
       sliceIndexByAxis[activeSliceAxis] = nextSliceIndex;
       setSliceIndexForAxis(activeSliceAxis, nextSliceIndex);
 
@@ -288,7 +293,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     });
 
     for (const axis of CROP_AXES) {
-      const axisSlider = document.getElementById(`slice-selector-${axis}-slider`) as HTMLInputElement | null;
+      const axisSlider = document.getElementById(`slice-${axis}-slider`) as HTMLInputElement | null;
       axisSlider?.addEventListener("input", () => {
         if (!isMultiSliceMode) {
           return;
@@ -296,6 +301,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
 
         const nextSliceIndex = clampSliceIndex(axis, axisSlider.valueAsNumber);
         sliceIndexByAxis[axis] = nextSliceIndex;
+        setSliceIndexForAxis(axis, nextSliceIndex);
 
         updateSliceSelectorUI();
         applyCropRegionFromState();
@@ -356,20 +362,6 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     onCropRegionApplied?.();
   }
 
-  function syncCropFill(axis: CropAxis) {
-    const fill = document.getElementById(`crop-${axis}-fill`) as HTMLElement | null;
-    if (!fill) {
-      return;
-    }
-
-    const minKey = cropAxisStateKeys[axis].min;
-    const maxKey = cropAxisStateKeys[axis].max;
-    const minValue = state[minKey] as number;
-    const maxValue = state[maxKey] as number;
-    fill.style.left = `${minValue * 100}%`;
-    fill.style.right = `${(1 - maxValue) * 100}%`;
-  }
-
   function getCropAxisSize(axis: CropAxis): number {
     const volumeSize = state.volume.imageInfo.volumeSize;
     switch (axis) {
@@ -412,11 +404,6 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     rightInput.value = `${right}`;
   }
 
-  function syncCropAxisUi(axis: CropAxis) {
-    syncCropFill(axis);
-    syncCropDimensionInputs(axis);
-  }
-
   function setCropAxisBounds(axis: CropAxis, left: number, right: number) {
     const axisSize = getCropAxisSize(axis);
     const minKey = cropAxisStateKeys[axis].min;
@@ -432,69 +419,54 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
 
   function syncCropInputsFromState() {
     for (const axis of CROP_AXES) {
-      const minInput = document.getElementById(`crop-${axis}-min`) as HTMLInputElement | null;
-      const maxInput = document.getElementById(`crop-${axis}-max`) as HTMLInputElement | null;
-      if (!minInput || !maxInput) {
-        continue;
-      }
-
+      const slider = cropSliders[axis];
       const minKey = cropAxisStateKeys[axis].min;
       const maxKey = cropAxisStateKeys[axis].max;
-      minInput.value = `${state[minKey]}`;
-      maxInput.value = `${state[maxKey]}`;
-      syncCropAxisUi(axis);
+      slider?.set(state[minKey] as number, state[maxKey] as number);
+      syncCropDimensionInputs(axis);
     }
   }
 
   function setupCropControls() {
     for (const axis of CROP_AXES) {
-      const minInput = document.getElementById(`crop-${axis}-min`) as HTMLInputElement | null;
-      const maxInput = document.getElementById(`crop-${axis}-max`) as HTMLInputElement | null;
       const leftInput = document.getElementById(`crop-${axis}-left`) as HTMLInputElement | null;
       const rightInput = document.getElementById(`crop-${axis}-right`) as HTMLInputElement | null;
+      const sliderHost = document.getElementById(`crop-${axis}-slider`) as HTMLElement | null;
 
-      if (!minInput || !maxInput || !leftInput || !rightInput) {
+      if (!leftInput || !rightInput || !sliderHost) {
         continue;
       }
 
       const minKey = cropAxisStateKeys[axis].min;
       const maxKey = cropAxisStateKeys[axis].max;
 
-      const onMinInput = () => {
-        const nextMin = Math.min(clamp01(minInput.valueAsNumber), state[maxKey] as number);
-        state[minKey] = nextMin;
-        minInput.value = `${nextMin}`;
-        syncCropAxisUi(axis);
+      const syncAxis = () => {
+        cropSliders[axis]?.set(state[minKey] as number, state[maxKey] as number);
+        syncCropDimensionInputs(axis);
         applyCropRegionFromState();
       };
 
-      const onMaxInput = () => {
-        const nextMax = Math.max(clamp01(maxInput.valueAsNumber), state[minKey] as number);
-        state[maxKey] = nextMax;
-        maxInput.value = `${nextMax}`;
-        syncCropAxisUi(axis);
-        applyCropRegionFromState();
-      };
-
-      minInput.addEventListener("input", onMinInput);
-      maxInput.addEventListener("input", onMaxInput);
+      cropSliders[axis] = createDualSlider({
+        host: sliderHost,
+        min: 0,
+        max: 1,
+        onChange: (minValue, maxValue) => {
+          state[minKey] = minValue;
+          state[maxKey] = maxValue;
+          syncCropDimensionInputs(axis);
+        },
+      });
 
       const onLeftChange = () => {
         const { right } = getCropAxisBounds(axis);
         setCropAxisBounds(axis, leftInput.valueAsNumber, right);
-        minInput.value = `${state[minKey]}`;
-        maxInput.value = `${state[maxKey]}`;
-        syncCropAxisUi(axis);
-        applyCropRegionFromState();
+        syncAxis();
       };
 
       const onRightChange = () => {
         const { left } = getCropAxisBounds(axis);
         setCropAxisBounds(axis, left, rightInput.valueAsNumber);
-        minInput.value = `${state[minKey]}`;
-        maxInput.value = `${state[maxKey]}`;
-        syncCropAxisUi(axis);
-        applyCropRegionFromState();
+        syncAxis();
       };
 
       const selectAll = (event: Event) => {
@@ -516,81 +488,10 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
       leftInput.addEventListener("click", selectAll);
       rightInput.addEventListener("click", selectAll);
 
+      leftInput.addEventListener("change", onLeftChange);
+      rightInput.addEventListener("change", onRightChange);
       leftInput.addEventListener("keydown", (event) => commitOnEnter(event, onLeftChange));
       rightInput.addEventListener("keydown", (event) => commitOnEnter(event, onRightChange));
-
-      const mergedSlider = minInput.closest(".crop-merged-slider") as HTMLElement | null;
-      if (mergedSlider) {
-        let activeHandle: "min" | "max" | null = null;
-
-        const updateFromClientX = (clientX: number, handle: "min" | "max") => {
-          const rect = mergedSlider.getBoundingClientRect();
-          if (rect.width <= 0) {
-            return;
-          }
-
-          const normalized = clamp01((clientX - rect.left) / rect.width);
-          const minValue = state[minKey] as number;
-          const maxValue = state[maxKey] as number;
-
-          if (handle === "min") {
-            const nextMin = Math.min(normalized, maxValue);
-            state[minKey] = nextMin;
-            minInput.value = `${nextMin}`;
-          } else {
-            const nextMax = Math.max(normalized, minValue);
-            state[maxKey] = nextMax;
-            maxInput.value = `${nextMax}`;
-          }
-
-          syncCropAxisUi(axis);
-          applyCropRegionFromState();
-        };
-
-        mergedSlider.addEventListener("pointerdown", (event: PointerEvent) => {
-          const target = event.target as HTMLElement;
-          if (target === minInput || target === maxInput) {
-            return;
-          }
-
-          const rect = mergedSlider.getBoundingClientRect();
-          if (rect.width <= 0) {
-            return;
-          }
-
-          const normalized = clamp01((event.clientX - rect.left) / rect.width);
-          const minValue = state[minKey] as number;
-          const maxValue = state[maxKey] as number;
-          const minDistance = Math.abs(normalized - minValue);
-          const maxDistance = Math.abs(normalized - maxValue);
-
-          activeHandle = minDistance <= maxDistance ? "min" : "max";
-          updateFromClientX(event.clientX, activeHandle);
-          mergedSlider.setPointerCapture(event.pointerId);
-          event.preventDefault();
-        });
-
-        mergedSlider.addEventListener("pointermove", (event: PointerEvent) => {
-          if (!activeHandle) {
-            return;
-          }
-          updateFromClientX(event.clientX, activeHandle);
-          event.preventDefault();
-        });
-
-        const stopDrag = (event: PointerEvent) => {
-          if (!activeHandle) {
-            return;
-          }
-          activeHandle = null;
-          if (mergedSlider.hasPointerCapture(event.pointerId)) {
-            mergedSlider.releasePointerCapture(event.pointerId);
-          }
-        };
-
-        mergedSlider.addEventListener("pointerup", stopDrag);
-        mergedSlider.addEventListener("pointercancel", stopDrag);
-      }
     }
 
     const resetCropBtn = document.getElementById("crop-reset-button") as HTMLButtonElement | null;
@@ -603,7 +504,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
       const indexing = `[${z.left}:${z.right}, ${y.left}:${y.right}, ${x.left}:${x.right}]`;
       navigator.clipboard.writeText(indexing);
 
-      const originalLabel = copyCropBtn.textContent || "Copy indeces";
+      const originalLabel = copyCropBtn.textContent || "Copy coordinates";
       copyCropBtn.textContent = `Copied ${indexing}`;
       window.setTimeout(() => {
         copyCropBtn.textContent = originalLabel;

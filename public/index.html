@@ -2,308 +2,316 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QIM Volume Explorer</title>
-    <style id="initial-controls-visibility">#controls-panel{display:none}</style>
+    <title>Qim Volume Explorer</title>
+    <style id="initial-ui-visibility">.topbar,.panel,.panel-tab,.menu,.menu-scrim,#error-note{display:none}</style>
     <script>
       (function () {
         const hidden = new URLSearchParams(window.location.search).get("hidden")?.trim().toLowerCase() === "true";
         if (!hidden) {
-          const initialStyle = document.getElementById("initial-controls-visibility");
+          const initialStyle = document.getElementById("initial-ui-visibility");
           initialStyle?.remove();
         }
       })();
     </script>
-    <link 
-      rel="stylesheet" 
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" 
-      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
-      crossorigin="anonymous">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap"
+      rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  
+
   <body>
-    <div class="flex-layout">
-      <div id="controls-panel" class="panel">
-        <div class="controls-item controls-title">
-          <h2 class="controls-title-heading">Qim Volume Explorer</h2>
-        </div>
-        <div class="controls-item">
-          <form id="source-form" class="row g-2 align-items-center">
-            <label for="source-url-input" class="controls-section-label col-12 col-form-label">Source</label>
-            <div class="col-12 col-sm">
-              <input id="source-url-input" type="text" class="form-control" placeholder="Paste URL" />
-            </div>
-            <div class="col-12 col-sm-auto d-grid">
-              <button id="source-load-button" class="btn btn-secondary" type="submit">Load</button>
-            </div>
-          </form>
-          <p id="source-error" class="mt-2 mb-0"></p>
-        </div>
-        
-        <div class="controls-item controls-compact-grid">
-          <div class="controls-compact-column scale-control-stack">
-            <label for="ome-zarr-scale-select" class="controls-section-label col-form-label">OME-Zarr scale</label>
-            <select id="ome-zarr-scale-select" class="form-select form-select-sm scale-select">
-              <option value="auto" selected>Auto</option>
-            </select>
-            <span class="scale-current-label">
-              Level (<span id="ome-zarr-scale-level-value">-</span>)
-              <span
-                id="ome-zarr-scale-loading-indicator"
-                class="scale-loading-indicator"
-                aria-hidden="true"
-                title="Loading scale data"
-              ></span>
-            </span>
-          </div>
-
-          <div class="controls-compact-column">
-            <div class="controls-section-label">Background</div>
-            <input type="color" id="backgroundColor" class="form-control form-control-color flex-shrink-0" value="#e6e6e6" title="Background color" />
-          </div>
-
-          <div class="controls-compact-column">
-            <div class="controls-section-label">Grid</div>
-            <div class="d-flex align-items-center gap-2 flex-nowrap">
-              <input type="color" id="boundingBoxColor" class="form-control form-control-color flex-shrink-0" value="#4d4d4d" title="Bounding box color" />
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" role="switch" id="showBoundingBox" aria-label="Toggle bounding box" />
-              </div>
-            </div>
-          </div>
-          <p id="scale-error" class="mt-2 mb-0"></p>
-        </div>
-
-        
-        <div class="controls-item">
-          <div class="controls-section-label">View selection</div>
-          <div class="d-flex align-items-center justify-content-between mb-2">
-            <div class="btn-group slice-view-buttons" role="group" aria-label="Ortho and 3D view controls">
-              <button id="Z" type="button" class="btn btn-outline-secondary btn-sm">Z</button>
-              <button id="Y" type="button" class="btn btn-outline-secondary btn-sm">Y</button>
-              <button id="X" type="button" class="btn btn-outline-secondary btn-sm">X</button>
-              <button id="ORTHO" type="button" class="btn btn-outline-secondary btn-sm">Ortho</button>
-              <button id="3D" type="button" class="btn btn-outline-secondary btn-sm is-active">3D</button>
-            </div>
-            <span id="slice-view-current" class="slice-view-current"></span>
-          </div>
-
-          <div id="slice-selector-panel" class="slice-selector-panel hidden mb-2">
-            <div class="d-flex align-items-center gap-2 flex-nowrap">
-              <label id="slice-selector-axis" for="slice-selector-slider" class="col-form-label fw-semibold mb-0 text-nowrap">Z</label>
-              <span id="slice-selector-min" class="slice-selector-bound">0</span>
-              <input id="slice-selector-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
-              <span id="slice-selector-max" class="slice-selector-bound">0</span>
-            </div>
-          </div>
-
-          <div id="slice-selector-3d-panel" class="slice-selector-panel hidden mb-2">
-            <div class="vstack gap-2">
-              <div class="d-flex align-items-center gap-2 flex-nowrap">
-                <label for="slice-selector-x-slider" class="col-form-label fw-semibold mb-0 text-nowrap">X</label>
-                <span id="slice-selector-x-min" class="slice-selector-bound">0</span>
-                <input id="slice-selector-x-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
-                <span id="slice-selector-x-max" class="slice-selector-bound">0</span>
-              </div>
-              <div class="d-flex align-items-center gap-2 flex-nowrap">
-                <label for="slice-selector-y-slider" class="col-form-label fw-semibold mb-0 text-nowrap">Y</label>
-                <span id="slice-selector-y-min" class="slice-selector-bound">0</span>
-                <input id="slice-selector-y-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
-                <span id="slice-selector-y-max" class="slice-selector-bound">0</span>
-              </div>
-              <div class="d-flex align-items-center gap-2 flex-nowrap">
-                <label for="slice-selector-z-slider" class="col-form-label fw-semibold mb-0 text-nowrap">Z</label>
-                <span id="slice-selector-z-min" class="slice-selector-bound">0</span>
-                <input id="slice-selector-z-slider" class="form-range slice-selector-slider" type="range" min="0" max="0" step="1" value="0" />
-                <span id="slice-selector-z-max" class="slice-selector-bound">0</span>
-              </div>
-            </div>
-          </div>
-          
-          
-          <div class="d-flex align-items-center justify-content-between mt-4">
-            <div class="controls-section-label">Cropping</div>
-          </div>
-          
-          <div id="crop-row-z" class="d-flex align-items-center gap-2 flex-nowrap ">
-            <label for="crop-z-min" class="col-form-label fw-semibold mb-0 text-nowrap">Z</label>
-            <input id="crop-z-left" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="0" aria-label="Crop Z start index" />
-            <div class="flex-grow-1">
-              <div class="crop-merged-slider">
-                <div class="crop-track"></div>
-                <div id="crop-z-fill" class="crop-fill"></div>
-                <input id="crop-z-min" class="crop-handle form-range" type="range" min="0" max="1" step="0.001" value="0" />
-                <input id="crop-z-max" class="crop-handle form-range" type="range" min="0" max="1" step="0.001" value="1" />
-              </div>
-            </div>
-            <input id="crop-z-right" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="1" aria-label="Crop Z end index" />
-          </div>
-          
-          <div id="crop-row-y" class="d-flex align-items-center gap-2 flex-nowrap">
-            <label for="crop-y-min" class="col-form-label fw-semibold mb-0 text-nowrap">Y</label>
-              <input id="crop-y-left" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="0" aria-label="Crop Y start index" />
-              <div class="flex-grow-1">
-                <div class="crop-merged-slider">
-                  <div class="crop-track"></div>
-                  <div id="crop-y-fill" class="crop-fill"></div>
-                  <input id="crop-y-min" class="crop-handle form-range" type="range" min="0" max="1" step="0.001" value="0" />
-                  <input id="crop-y-max" class="crop-handle form-range" type="range" min="0" max="1" step="0.001" value="1" />
-                </div>
-              </div>
-              <input id="crop-y-right" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="1" aria-label="Crop Y end index" />
-            </div>
-
-            <div class="vstack gap-2">
-              <div id="crop-row-x" class="d-flex align-items-center gap-2 flex-nowrap">
-                <label for="crop-x-min" class="col-form-label fw-semibold mb-0 text-nowrap">X</label>
-                <input id="crop-x-left" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="0" aria-label="Crop X start index" />
-                <div class="flex-grow-1">
-                  <div class="crop-merged-slider">
-                    <div class="crop-track"></div>
-                    <div id="crop-x-fill" class="crop-fill"></div>
-                    <input id="crop-x-min" class="crop-handle form-range" type="range" min="0" max="1" step="0.001" value="0" />
-                    <input id="crop-x-max" class="crop-handle form-range" type="range" min="0" max="1" step="0.001" value="1" />
-                  </div>
-                </div>
-                <input id="crop-x-right" class="crop-dimension-value form-control form-control-sm" type="number" min="0" step="1" value="1" aria-label="Crop X end index" />
-              </div>
-            </div>
-
-
-            <div class="d-flex align-items-center gap-2 flex-nowrap controls-compact-grid mt-3">
-              <button id="crop-copy-indeces-button" type="button" class="btn btn-outline-secondary btn-sm">Copy coordinates</button>
-              <button id="crop-reset-button" type="button" class="btn btn-outline-secondary btn-sm">Reset crop</button>
-              <label for="cropHandlesToggle" class="col-form-label mb-0 text-nowrap">3D handles</label>
-              <div class="form-check form-switch mb-0">
-                <input class="form-check-input" type="checkbox" role="switch" id="cropHandlesToggle" aria-label="Toggle draggable 3D crop handles" />
-              </div>
-            </div>
-            
-
-
-        </div>
-
-      
-        <div class="controls-item">
-          <div class="controls-section-label">Colormap adjustment</div>
-          <div class="d-flex align-items-center justify-content-start gap-2 flex-nowrap mb-2">
-            <details id="colormap-dropdown" class="colormap-dropdown flex-grow-1">
-              <summary id="colormap-dropdown-toggle" class="colormap-dropdown-toggle" aria-label="Choose colormap">
-                <span id="colormap-dropdown-preview" class="colormap-dropdown-preview" aria-hidden="true"></span>
-              </summary>
-              <div id="colormap-picker" class="colormap-picker" role="listbox" aria-label="Colormap picker"></div>
-            </details>
-            <button id="colormap-invert-toggle" type="button" class="btn btn-outline-secondary btn-sm flex-shrink-0" aria-pressed="false" title="Invert colormap">
-              Invert scale
-            </button>
-          </div>
-          <div class="border rounded-2 overflow-hidden">
-            <canvas id="histogram-canvas" width="2048px" height="1024px"></canvas>
-          </div>
-        </div>
-
-        <div class="controls-item">
-          <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
-            <label class="col-form-label mb-0 text-nowrap">Colormap range</label>
-            <div class="flex-grow-1">
-              <div class="crop-merged-slider">
-                <div class="crop-track"></div>
-                <div id="colormap-range-fill" class="crop-fill"></div>
-                <input id="colormap-range-min" class="crop-handle form-range" type="range" min="0" max="255" step="1" value="0" />
-                <input id="colormap-range-max" class="crop-handle form-range" type="range" min="0" max="255" step="1" value="255" />
-              </div>
-            </div>
-          </div>
-
-          <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2">
-            <label for="global-opacity-slider" class="col-form-label mb-0 text-nowrap">Global opacity</label>
-            <div class="d-flex align-items-center gap-2 flex-grow-1 w-100">
-              <input
-                id="global-opacity-slider"
-                class="form-range opacity-range flex-grow-1"
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="1"
-              />
-              <div class="opacity-input-group">
-                <input
-                  id="global-opacity-input"
-                  class="crop-dimension-value opacity-value form-control form-control-sm"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="100"
-                  aria-label="Global opacity percentage"
-                />
-                <span class="opacity-percent">%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <button id="screenshot-button" class="btn btn-secondary" type="button">Screenshot</button>
-        <div class="hidden">
-          <p style="margin: 2px">
-            <button id="colorize">Colorize</button>
-            <input id="segchannel" type="number" min="0" max="10" step="1" value="0" />
-            <select name="Feature" id="feature">
-              <option value="feature1" selected>f1</option>
-              <option value="feature2">f2</option>
-            </select>
-            <input id="featmin" type="range" min="0" max="100" step="1" value="0" />
-            <input id="featmax" type="range" min="0" max="100" step="1" value="100" />
-          </p>
-          <p style="margin: 2px">
-            <button id="rotBtn">Turntable</button>
-            <button id="xfBtn">Align</button>
-            <button id="resetCamBtn">ResetCam</button>
-            <select name="Render mode" id="renderMode">
-              <option value="RM" selected>Volumetric</option>
-              <option value="PT">Pathtrace</option>
-              <option value="MP">Max project</option>
-            </select>
-            <button id="interpolateBtn">Interpolate</button>
-          </p>
-
-          <p>Pathtrace iterations: <span id="counter">0</span></p>
-
-          <p>
-            <label for="gammaMin">Gamma Min</label>
-            <input id="gammaMin" type="number" min="0" max="255" step="1" value="0" />
-            <label for="gammaScale">Gamma Scale</label>
-            <input id="gammaScale" type="number" min="0" max="255" step="1" value="128" />
-            <label for="gammaMax">Gamma Max</label>
-            <input id="gammaMax" type="number" min="0" max="255" step="1" value="255" />
-          </p>
-
-          <p style="margin: 2px">
-            <button id="flipXBtn">FlipX</button>
-            <button id="flipYBtn">FlipY</button>
-            <button id="flipZBtn">FlipZ</button>
-            <label for="zSlider">Z-Slice</label>
-            <button id="zbackBtn">Z Back</button>
-            <button id="zforwardBtn">Z Forward</button>
-            <input id="zSlider" type="range" min="0" max="0" step="1" value="0" />
-            <input type="number" id="zValue" min="0" max="0" value="0" />
-          </p>
-
-          <button id="playBtn">Play</button>
-          <button id="pauseBtn">Pause</button>
-          <button id="backBtn">Back</button>
-          <button id="forwardBtn">Forward</button>
-          <input id="timeSlider" type="range" min="0" max="0" step="1" value="0" />
-          <input type="number" id="timeValue" min="0" max="0" value="0" />
-          <input type="number" id="sceneValue" min="0" max="0" value="0" />
-        </div>
-      </div>
-      <div id="viewer-panel" class="panel">
+    <div class="app" id="app">
+      <div class="viewport" id="viewer-panel">
         <div id="volume-loading-overlay" class="volume-loading-overlay" aria-hidden="true">
           <div class="volume-loading-overlay-content" role="status" aria-live="polite">
             <span class="volume-loading-overlay-spinner" aria-hidden="true"></span>
+            <span class="volume-loading-overlay-text">Loading volume</span>
           </div>
         </div>
+      </div>
+
+      <div id="error-note" class="error-note" aria-live="polite"></div>
+
+      <!-- ======================= TOP BAR ======================= -->
+      <header class="card topbar" id="topbar">
+        <span class="topbar__title">Qim Volume Explorer</span>
+
+        <form id="source-form" class="source">
+          <input
+            id="source-url-input"
+            class="source__url"
+            type="text"
+            placeholder="Paste URL"
+            aria-label="Source URL" />
+          <button id="source-load-button" class="btn-load" type="submit">Load</button>
+        </form>
+
+        <div class="topbar__right">
+          <span class="topbar__label" id="ome-zarr-scale-label">OME-Zarr scale</span>
+          <button
+            id="ome-zarr-scale-select"
+            class="select"
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded="false">
+            <span id="ome-zarr-scale-select-text">Auto</span>
+            <span class="select__chevron" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="12" height="12">
+                <path d="M4 6 l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+          </button>
+          <ul id="ome-zarr-scale-options" class="select__options" role="listbox" aria-label="OME-Zarr scale levels" hidden></ul>
+
+          <button id="export-button" class="btn-export" type="button" aria-haspopup="true" aria-expanded="false">
+            Export
+            <span class="btn-export__chevron" aria-hidden="true">
+              <svg viewBox="0 0 16 16" width="12" height="12">
+                <path d="M4 6 l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </span>
+          </button>
+        </div>
+      </header>
+
+      <!-- ======================= LEFT CARD ======================= -->
+      <aside class="card panel panel--left" id="panel-left">
+        <div class="panel__header" id="panel-left-header">
+          <span class="panel__caption">View &amp; crop</span>
+          <button class="ghost" id="panel-left-collapse" type="button" aria-label="Collapse view and crop panel">
+            <svg viewBox="0 0 16 16" width="14" height="14"><path d="M10 3 L5 8 l5 5" /></svg>
+          </button>
+        </div>
+        <div class="panel__body" id="panel-left-body">
+          <section class="section section--gap-10">
+            <div class="section__label">View</div>
+            <div class="segmented" id="view-segmented" role="group" aria-label="View selection" data-index="4">
+              <span class="segmented__thumb" aria-hidden="true"></span>
+              <button class="segmented__item" type="button" data-mode="Z" aria-pressed="false">Z</button>
+              <button class="segmented__item" type="button" data-mode="Y" aria-pressed="false">Y</button>
+              <button class="segmented__item" type="button" data-mode="X" aria-pressed="false">X</button>
+              <button class="segmented__item" type="button" data-mode="ORTHO" aria-pressed="false">Ortho</button>
+              <button class="segmented__item" type="button" data-mode="3D" aria-pressed="true">3D</button>
+            </div>
+          </section>
+
+          <section class="section section--gap-12" id="slice-position-section" hidden>
+            <div class="section__head">
+              <div class="section__label">Slice position</div>
+              <span id="slice-position-readout" class="slice-readout" aria-live="polite"></span>
+            </div>
+            <div id="slice-single-row" class="row" hidden>
+              <span class="row__axis" id="slice-single-axis">Z</span>
+              <span class="row__value" id="slice-single-value">0</span>
+              <input
+                id="slice-single-slider"
+                class="single-slider"
+                type="range"
+                min="0"
+                max="0"
+                step="1"
+                value="0"
+                aria-label="Slice position" />
+            </div>
+            <div id="slice-ortho-rows" hidden>
+              <div class="row">
+                <span class="row__axis">X</span>
+                <span class="row__value" id="slice-x-value">0</span>
+                <input id="slice-x-slider" class="single-slider" type="range" min="0" max="0" step="1" value="0" aria-label="X slice position" />
+              </div>
+              <div class="row">
+                <span class="row__axis">Y</span>
+                <span class="row__value" id="slice-y-value">0</span>
+                <input id="slice-y-slider" class="single-slider" type="range" min="0" max="0" step="1" value="0" aria-label="Y slice position" />
+              </div>
+              <div class="row">
+                <span class="row__axis">Z</span>
+                <span class="row__value" id="slice-z-value">0</span>
+                <input id="slice-z-slider" class="single-slider" type="range" min="0" max="0" step="1" value="0" aria-label="Z slice position" />
+              </div>
+            </div>
+          </section>
+          <div class="divider" id="slice-divider" hidden></div>
+
+          <section class="section section--gap-12">
+            <div class="section__label">Crop</div>
+            <div class="row" id="crop-row-z">
+              <span class="row__axis">Z</span>
+              <input id="crop-z-left" class="num" type="number" min="0" step="1" value="0" aria-label="Crop Z start index" />
+              <div class="slider" id="crop-z-slider">
+                <div class="slider__fill" id="crop-z-fill"></div>
+                <div class="slider__thumb" id="crop-z-min" data-handle="min" aria-label="Crop Z minimum"></div>
+                <div class="slider__thumb" id="crop-z-max" data-handle="max" aria-label="Crop Z maximum"></div>
+              </div>
+              <input id="crop-z-right" class="num" type="number" min="0" step="1" value="1" aria-label="Crop Z end index" />
+            </div>
+
+            <div class="row" id="crop-row-y">
+              <span class="row__axis">Y</span>
+              <input id="crop-y-left" class="num" type="number" min="0" step="1" value="0" aria-label="Crop Y start index" />
+              <div class="slider" id="crop-y-slider">
+                <div class="slider__fill" id="crop-y-fill"></div>
+                <div class="slider__thumb" id="crop-y-min" data-handle="min" aria-label="Crop Y minimum"></div>
+                <div class="slider__thumb" id="crop-y-max" data-handle="max" aria-label="Crop Y maximum"></div>
+              </div>
+              <input id="crop-y-right" class="num" type="number" min="0" step="1" value="1" aria-label="Crop Y end index" />
+            </div>
+
+            <div class="row" id="crop-row-x">
+              <span class="row__axis">X</span>
+              <input id="crop-x-left" class="num" type="number" min="0" step="1" value="0" aria-label="Crop X start index" />
+              <div class="slider" id="crop-x-slider">
+                <div class="slider__fill" id="crop-x-fill"></div>
+                <div class="slider__thumb" id="crop-x-min" data-handle="min" aria-label="Crop X minimum"></div>
+                <div class="slider__thumb" id="crop-x-max" data-handle="max" aria-label="Crop X maximum"></div>
+              </div>
+              <input id="crop-x-right" class="num" type="number" min="0" step="1" value="1" aria-label="Crop X end index" />
+            </div>
+
+            <div class="btn-row">
+              <button id="crop-copy-indeces-button" type="button" class="btn-outline">Copy coordinates</button>
+              <button id="crop-reset-button" type="button" class="btn-outline">Reset crop</button>
+            </div>
+
+            <div class="field">
+              <span>3D handles</span>
+              <button class="toggle" id="cropHandlesToggle" type="button" role="switch" aria-checked="true" aria-label="Toggle draggable 3D crop handles"></button>
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <!-- ======================= RIGHT CARD ======================= -->
+      <aside class="card panel panel--right" id="panel-right">
+        <div class="panel__header" id="panel-right-header">
+          <span class="panel__caption">Appearance</span>
+          <button class="ghost" id="panel-right-collapse" type="button" aria-label="Collapse appearance panel">
+            <svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3 l5 5 -5 5" /></svg>
+          </button>
+        </div>
+        <div class="panel__body" id="panel-right-body">
+          <section class="section section--gap-14">
+            <div class="section__head">
+              <div class="section__label">Colormap</div>
+              <div class="colormap-head">
+                <button id="colormap-chip" class="colormap-chip" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Choose colormap"></button>
+                <button id="colormap-invert-toggle" type="button" class="btn-small" aria-pressed="false">Invert</button>
+              </div>
+            </div>
+            <div id="colormap-picker" class="colormap-picker" role="listbox" aria-label="Colormap picker" hidden></div>
+
+            <div class="histogram" id="histogram-wrap">
+              <canvas id="histogram-canvas"></canvas>
+              <span class="histogram__tag" id="histogram-min-tag">0</span>
+              <span class="histogram__tag" id="histogram-max-tag">255</span>
+            </div>
+
+            <div class="range-block">
+              <div class="range" id="colormap-range">
+                <div class="range__track"></div>
+                <div class="range__fill" id="colormap-range-fill"></div>
+                <div class="range__thumb" id="colormap-range-min" data-handle="min" aria-label="Colormap range minimum"></div>
+                <div class="range__thumb" id="colormap-range-max" data-handle="max" aria-label="Colormap range maximum"></div>
+              </div>
+              <div class="range__meta">
+                <span>Colormap range</span>
+                <span class="mono" id="colormap-range-values">0 – 255</span>
+              </div>
+            </div>
+
+            <div class="row opacity-row" id="opacity-row">
+              <span class="opacity-label">Opacity</span>
+              <input id="global-opacity-slider" class="single-slider" type="range" min="0" max="100" step="1" value="25" aria-label="Global opacity percentage" />
+              <input id="global-opacity-input" class="num opacity-value" type="number" min="0" max="100" step="1" value="25" aria-label="Global opacity percentage" />
+              <span class="opacity-unit">%</span>
+            </div>
+          </section>
+
+          <div class="divider"></div>
+
+          <section class="section section--gap-12">
+            <div class="section__label">Display</div>
+            <div class="field">
+              <span>Grid</span>
+              <button class="toggle" id="showBoundingBox" type="button" role="switch" aria-checked="true" aria-label="Toggle bounding box"></button>
+            </div>
+            <div class="field">
+              <span>Background</span>
+              <button class="swatch" id="backgroundColor" type="button" aria-label="Background color"></button>
+              <input type="color" id="backgroundColor-input" hidden value="#e6e6e6" aria-hidden="true" />
+            </div>
+          </section>
+        </div>
+      </aside>
+
+      <!-- ======================= EXPORT MENU (rendered while open) ======================= -->
+      <div class="menu-scrim" id="menu-scrim" hidden></div>
+      <div class="card menu" id="export-menu" role="menu" aria-label="Export options" hidden>
+        <button class="menu__item" type="button" role="menuitem" data-action="screenshot">
+          Screenshot <span class="menu__hint">PNG</span>
+        </button>
+        <button class="menu__item" type="button" role="menuitem" data-action="cropped-volume">
+          Cropped volume <span class="menu__hint">TIFF</span>
+        </button>
+        <div class="menu__sep" role="separator"></div>
+        <button class="menu__item" type="button" role="menuitem" data-action="copy-view-link">
+          Copy view link <span class="menu__hint">↗</span>
+        </button>
+      </div>
+
+      <!-- ======================= ADVANCED / DEBUG CONTROLS (hidden) ======================= -->
+      <div class="hidden">
+        <p style="margin: 2px">
+          <button id="colorize">Colorize</button>
+          <input id="segchannel" type="number" min="0" max="10" step="1" value="0" />
+          <select name="Feature" id="feature">
+            <option value="feature1" selected>f1</option>
+            <option value="feature2">f2</option>
+          </select>
+          <input id="featmin" type="range" min="0" max="100" step="1" value="0" />
+          <input id="featmax" type="range" min="0" max="100" step="1" value="100" />
+        </p>
+        <p style="margin: 2px">
+          <button id="rotBtn">Turntable</button>
+          <button id="xfBtn">Align</button>
+          <button id="resetCamBtn">ResetCam</button>
+          <select name="Render mode" id="renderMode">
+            <option value="RM" selected>Volumetric</option>
+            <option value="PT">Pathtrace</option>
+            <option value="MP">Max project</option>
+          </select>
+          <button id="interpolateBtn">Interpolate</button>
+        </p>
+
+        <p>Pathtrace iterations: <span id="counter">0</span></p>
+
+        <p>
+          <label for="gammaMin">Gamma Min</label>
+          <input id="gammaMin" type="number" min="0" max="255" step="1" value="0" />
+          <label for="gammaScale">Gamma Scale</label>
+          <input id="gammaScale" type="number" min="0" max="255" step="1" value="128" />
+          <label for="gammaMax">Gamma Max</label>
+          <input id="gammaMax" type="number" min="0" max="255" step="1" value="255" />
+        </p>
+
+        <p style="margin: 2px">
+          <button id="flipXBtn">FlipX</button>
+          <button id="flipYBtn">FlipY</button>
+          <button id="flipZBtn">FlipZ</button>
+          <label for="zSlider">Z-Slice</label>
+          <button id="zbackBtn">Z Back</button>
+          <button id="zforwardBtn">Z Forward</button>
+          <input id="zSlider" type="range" min="0" max="0" step="1" value="0" />
+          <input type="number" id="zValue" min="0" max="0" value="0" />
+        </p>
+
+        <button id="playBtn">Play</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="backBtn">Back</button>
+        <button id="forwardBtn">Forward</button>
+        <input id="timeSlider" type="range" min="0" max="0" step="1" value="0" />
+        <input type="number" id="timeValue" min="0" max="0" value="0" />
+        <input type="number" id="sceneValue" min="0" max="0" value="0" />
       </div>
     </div>
   </body>
