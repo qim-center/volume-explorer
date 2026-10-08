@@ -307,6 +307,16 @@ button { font-family: inherit; cursor: pointer; }
   .source { max-width: none; }
 }
 
+/* ---------- version badge (bottom left) ---------- */
+.version-badge { position: absolute; z-index: 2; left: var(--gap-edge); bottom: var(--gap-edge);
+  display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px;
+  border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-card);
+  color: var(--label); text-decoration: none; }
+.version-badge__logo { flex: none; display: block; }
+.version-badge__version { font: 10px var(--mono); color: var(--label); }
+.version-badge:hover { color: var(--ink); }
+.version-badge:hover .version-badge__version { color: var(--ink); }
+
 /* hidden UI (app launched with ?hidden=true): render only */
 body.ui-hidden .topbar,
 body.ui-hidden .panel,
@@ -315,4 +325,5 @@ body.ui-hidden .menu,
 body.ui-hidden .menu-scrim,
 body.ui-hidden .error-note,
 body.ui-hidden .info-note,
-body.ui-hidden .select__options { display: none; }
+body.ui-hidden .select__options,
+body.ui-hidden .version-badge { display: none; }
