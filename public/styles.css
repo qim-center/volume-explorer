@@ -117,7 +117,7 @@ button { font-family: inherit; cursor: pointer; }
 .hidden { display: none !important; }
 
 /* the `hidden` attribute is overridden by author `display` rules (e.g. .colormap-picker { display: grid }) */
-.colormap-picker[hidden], .select__options[hidden], .menu[hidden], .menu-scrim[hidden], .row[hidden], .error-note[hidden] { display: none; }
+.colormap-picker[hidden], .select__options[hidden], .menu[hidden], .menu-scrim[hidden], .row[hidden], .error-note[hidden], .info-note[hidden] { display: none; }
 
 /* collapsed panel = the header strip alone, same look, chevron flipped */
 .panel-tab { position: absolute; z-index: 1; top: var(--panel-top); height: var(--panel-header-h); padding: 0 6px 0 20px;
@@ -242,6 +242,29 @@ button { font-family: inherit; cursor: pointer; }
 .menu__sep { height: 1px; margin: 6px 0; background: var(--divider); }
 
 /* ---------- error note (below the top bar, only while an error is set) ---------- */
+/* info message = small centered modal with an accent banner, slides up from below */
+.info-note { position: fixed; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(360px, calc(100vw - 40px)); padding: 20px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-card);
+  font-size: 13px; color: var(--ink); line-height: 1.5; overflow: hidden; animation: info-note-in .3s ease-in both; }
+@keyframes info-note-in {
+  from { transform: translate(-50%, calc(-50% + 28px)); opacity: 0; }
+  to { transform: translate(-50%, -50%); opacity: 1; }
+}
+.info-note__banner { display: flex; align-items: center; justify-content: space-between;
+  margin: -20px -20px 12px; padding: 10px 8px 10px 20px;
+  background: color-mix(in srgb, var(--accent) 14%, #fff); }
+.info-note__title { font-weight: 600; color: var(--accent); }
+.info-note__body { padding-bottom: 2px; }
+.info-note p { margin: 0; white-space: pre-line; }
+.info-note code { display: inline-block; margin-top: 6px; padding: 6px 10px; width: calc(100% - 20px);
+  box-sizing: border-box; border-radius: var(--r-control); background: var(--surface-muted);
+  border: 1px solid var(--border); font: 12px var(--mono); color: var(--ink); white-space: nowrap; }
+.info-note__close { width: 24px; height: 24px; padding: 0; flex: none;
+  border: 0; border-radius: var(--r-control); background: none; color: var(--accent);
+  display: flex; align-items: center; justify-content: center; }
+.info-note__close:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+
 /* error message = small centered modal, slides up from below */
 .error-note { position: fixed; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: min(360px, calc(100vw - 40px)); padding: 20px;
@@ -291,4 +314,5 @@ body.ui-hidden .panel-tab,
 body.ui-hidden .menu,
 body.ui-hidden .menu-scrim,
 body.ui-hidden .error-note,
+body.ui-hidden .info-note,
 body.ui-hidden .select__options { display: none; }

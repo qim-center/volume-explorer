@@ -69,19 +69,27 @@ function setVolumeLoading(isLoading: boolean) {
   }
 }
 
-function setUiNote(warning?: string) {
-  const note = document.getElementById("error-note");
-  const message = document.getElementById("error-note-message");
+function showNote(id: string, messageId: string, text: string | null) {
+  const note = document.getElementById(id);
+  const message = document.getElementById(messageId);
   if (!note || !message) {
     return;
   }
-  if (warning) {
-    message.textContent = warning;
+  if (text) {
+    message.textContent = text;
     note.hidden = false;
   } else {
     note.hidden = true;
     message.textContent = "";
   }
+}
+
+function setUiNote(warning?: string) {
+  showNote("error-note", "error-note-message", warning ?? null);
+}
+
+function setUiInfo(message?: string) {
+  showNote("info-note", "info-note-message", message ?? null);
 }
 
 const myState = createInitialState();
@@ -1142,11 +1150,13 @@ function main() {
 
   setupRangeFillSync();
 
-  // error modal: dismiss via its X button or Escape
+  // error/info modals: dismiss via their X button or Escape
   document.getElementById("error-note-close")?.addEventListener("click", () => setUiNote());
+  document.getElementById("info-note-close")?.addEventListener("click", () => setUiInfo());
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       setUiNote();
+      setUiInfo();
     }
   });
 

@@ -30,6 +30,20 @@
         </div>
       </div>
 
+      <div id="info-note" class="info-note" role="status" aria-live="polite" hidden>
+        <div class="info-note__banner">
+          <span class="info-note__title">Info</span>
+          <button id="info-note-close" class="info-note__close" type="button" aria-label="Dismiss info">
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+              <path d="M4 4 l8 8 M12 4 l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div class="info-note__body">
+          <p id="info-note-message"></p>
+        </div>
+      </div>
+
       <div id="error-note" class="error-note" role="alert" aria-live="polite" hidden>
         <div class="error-note__banner">
           <span class="error-note__title">Error</span>

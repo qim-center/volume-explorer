@@ -509,11 +509,13 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
       const indexing = `[${z.left}:${z.right}, ${y.left}:${y.right}, ${x.left}:${x.right}]`;
       navigator.clipboard.writeText(indexing);
 
-      const originalLabel = copyCropBtn.textContent || "Copy coordinates";
-      copyCropBtn.textContent = `Copied ${indexing}`;
-      window.setTimeout(() => {
-        copyCropBtn.textContent = originalLabel;
-      }, 3000);
+      const note = document.getElementById("info-note");
+      const message = document.getElementById("info-note-message");
+      if (note && message) {
+        // indexing contains only digits, colons, brackets and spaces, so it is safe to embed directly
+        message.innerHTML = `Coordinates for the cropped region were copied to the clipboard. The values are the following:\n<code>${indexing}</code>`;
+        note.hidden = false;
+      }
     });
 
     resetCropBtn?.addEventListener("click", () => {
