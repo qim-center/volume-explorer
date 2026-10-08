@@ -96,8 +96,9 @@ button { font-family: inherit; cursor: pointer; }
 .panel__caption { font-size: 11px; color: var(--caption); }
 .ghost { width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-control); background: none;
   display: flex; align-items: center; justify-content: center; flex: none; }
-.ghost:hover { background: var(--surface-muted); }
-.ghost svg { width: 14px; height: 14px; stroke: var(--caption); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ghost svg { width: 14px; height: 14px; stroke: var(--caption); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  opacity: .65; transition: opacity .15s; }
+.ghost:hover svg { opacity: 1; }
 
 /* collapsed card = its own header strip: width shrinks to content, body hidden */
 .panel.is-collapsed { width: auto; }
@@ -146,7 +147,7 @@ button { font-family: inherit; cursor: pointer; }
 .num[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .num[type="number"] { -moz-appearance: textfield; }
 
-.slider { position: relative; flex: 1; height: 24px; }          /* tall touch area, 4px visual track */
+.slider { position: relative; flex: 1; margin: 0 12px; height: 24px; }  /* tall touch area, 4px visual track */
 .slider__track { position: absolute; left: 0; right: 0; top: 10px; height: 4px; border-radius: 2px; background: var(--track); }
 .slider__fill { position: absolute; top: 10px; height: 4px; border-radius: 2px; background: var(--accent);
   left: var(--from, 0%); right: calc(100% - var(--to, 100%)); }
@@ -160,7 +161,7 @@ button { font-family: inherit; cursor: pointer; }
 .btn-small[aria-pressed="true"] { border-color: var(--ink); background: var(--surface-muted); }
 
 /* ---------- toggle ---------- */
-.field { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.field { display: flex; justify-content: flex-end; align-items: center; gap: 10px; font-size: 13px; }
 .field.is-disabled { opacity: .5; pointer-events: none; }
 .toggle { position: relative; width: 36px; height: 20px; padding: 0; border: 0; border-radius: 10px;
   background: var(--toggle-off); transition: background .2s; flex: none; }
