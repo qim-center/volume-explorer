@@ -1,3 +1,4 @@
+import { Color } from "three";
 import { Lut, View3d, Volume } from "../../../src";
 import { HistogramSelection } from "../state/stateService";
 import { histogramBinFromX } from "../utils/math";
@@ -9,8 +10,33 @@ interface HistogramControllerOptions {
   selection: HistogramSelection;
   getVolume: () => Volume;
   getView3D: () => View3d;
+  /** Ordered colormap stops (hex colors) for the current colormap, or null to draw the gray silhouette. */
+  getColormapStops?: () => string[] | null;
+  /** Colormap range in 0–255 LUT space (maps the x-axis of the colormap across the histogram). */
+  getColormapRange?: () => { min: number; max: number };
   onLutUpdated?: (volume: Volume, channelIndex: number) => void;
 }
+
+const sampleColormapStops = (stopColors: Color[], t: number): [number, number, number] => {
+  if (stopColors.length === 0) {
+    return [255, 255, 255];
+  }
+  if (stopColors.length === 1) {
+    const only = stopColors[0];
+    return [Math.round(only.r * 255), Math.round(only.g * 255), Math.round(only.b * 255)];
+  }
+
+  const clamped = Math.min(1, Math.max(0, t));
+  const scaled = clamped * (stopColors.length - 1);
+  const index = Math.min(stopColors.length - 2, Math.floor(scaled));
+  const frac = scaled - index;
+  const a = stopColors[index];
+  const b = stopColors[index + 1];
+  const r = a.r + (b.r - a.r) * frac;
+  const g = a.g + (b.g - a.g) * frac;
+  const bcol = a.b + (b.b - a.b) * frac;
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(bcol * 255)];
+};
 
 const COLORS = {
   silhouette: "#c9c9c3",
@@ -25,7 +51,7 @@ const GRIP_RADIUS = 6;
 const GRIP_HOVER_BONUS = 1.5;
 
 export function createHistogramController(options: HistogramControllerOptions) {
-  const { canvas, minTag, maxTag, selection, getVolume, getView3D, onLutUpdated } = options;
+  const { canvas, minTag, maxTag, selection, getVolume, getView3D, getColormapStops, getColormapRange, onLutUpdated } = options;
   let histogramHandleAnimationFrame: number | null = null;
 
   const resizeCanvasToDisplay = (): { width: number; height: number; dpr: number } | null => {
@@ -94,11 +120,30 @@ export function createHistogramController(options: HistogramControllerOptions) {
 
     const barWidth = w / bins.length;
 
-    // gray silhouette of the distribution, anchored to the bottom edge
-    ctx.fillStyle = COLORS.silhouette;
+    // colour the bars with the active colormap when one is available (like the original UI),
+    // otherwise fall back to the gray silhouette
+    let stopColors: Color[] | null = null;
+    let cmMin = 0;
+    let cmMax = 0;
+    const stops = getColormapStops?.();
+    if (stops && stops.length > 0) {
+      stopColors = stops.map((stop) => new Color(stop));
+      const maxBinIndex = bins.length - 1;
+      const range = getColormapRange?.() ?? { min: 0, max: 255 };
+      cmMin = maxBinIndex ? Math.round(range.min / 255 * maxBinIndex) : 0;
+      cmMax = maxBinIndex ? Math.round(range.max / 255 * maxBinIndex) : 0;
+    }
+
     for (let i = 0; i < bins.length; i++) {
       const v0 = Math.log1p(bins[i]) / maxLog;
       const barHeight = v0 * h;
+      if (stopColors) {
+        const t = (i - cmMin) / (cmMax - cmMin || 1);
+        const [r, g, b] = sampleColormapStops(stopColors, t);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+      } else {
+        ctx.fillStyle = COLORS.silhouette;
+      }
       ctx.fillRect(i * barWidth, h - barHeight, Math.max(1, barWidth), barHeight);
     }
 
