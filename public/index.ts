@@ -84,6 +84,15 @@ function showNote(id: string, messageId: string, text: string | null) {
   }
 }
 
+declare const APP_VERSION: string; // injected by Vite (package.json version)
+
+function syncVersionBadge(): void {
+  const versionEl = document.getElementById("version-badge-version");
+  if (versionEl) {
+    versionEl.textContent = `v${APP_VERSION}`;
+  }
+}
+
 function setUiNote(warning?: string) {
   showNote("error-note", "error-note-message", warning ?? null);
 }
@@ -1149,6 +1158,8 @@ function main() {
   });
 
   setupRangeFillSync();
+
+  syncVersionBadge();
 
   // error/info modals: dismiss via their X button or Escape
   document.getElementById("error-note-close")?.addEventListener("click", () => setUiNote());
