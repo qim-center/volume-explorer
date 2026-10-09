@@ -44,10 +44,10 @@ The explorer opens with a OME-Zarr public dataset by default. Paste any dataset 
 
 ### Supported data types
 
-- `.zarr` / `.ome.zarr` — OME-Zarr (multi-scale, multi-channel, multi-time)
-- `.h5` / `.hdf5` — OME-NGff
-- `.ome.tif` / `.ome.tiff` — OME-Tiff
-- `.tif` / `.tiff` — plain tiff stacks (local files)
+- `.zarr` / `.ome.zarr`
+- `.h5` / `.hdf5` 
+- `.ome.tif` / `.ome.tiff` 
+- `.tif` / `.tiff`
 
 ### URL parameters
 
