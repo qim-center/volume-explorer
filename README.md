@@ -8,7 +8,7 @@ It is implemented on top of the [vole-core library](https://github.com/allen-cel
 
 ## Features
 
-- **Volumetric 3D rendering** — interactive raymarched volume rendering with adjustable opacity.
+- **Volumetric 3D rendering** — interactive volume rendering with adjustable opacity.
 - **2D slice and ortho views** — jump between X, Y, and Z slice views, three-way orthogonal views, and the 3D volume with a single control, and step through slices with a slider.
 - **Multiple data formats** — load OME-Zarr, OME-NGff (`.h5`/`.hdf5`), and OME-Tiff data directly from a URL, or open local `.tif`/`.tiff`.
 - **Colormaps & histogram** — pick from a set of scientific colormaps (viridis, plasma, inferno, magma, cividis, grayscale), invert them, and drive the intensity window by brushing directly on the intensity histogram.
