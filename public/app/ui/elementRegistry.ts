@@ -25,6 +25,7 @@ export interface AppUiElements {
   colormapInvertToggle: HTMLButtonElement | null;
   colormapRange: HTMLElement | null;
   colormapRangeFill: HTMLElement | null;
+  colormapRangeValues: HTMLElement | null;
   globalOpacitySlider: HTMLInputElement | null;
   globalOpacityInput: HTMLInputElement | null;
   showBoundingBox: HTMLButtonElement | null;
@@ -66,6 +67,7 @@ export function getAppUiElements(doc: Document = document): AppUiElements {
     colormapInvertToggle: byId("colormap-invert-toggle"),
     colormapRange: byId("colormap-range"),
     colormapRangeFill: byId("colormap-range-fill"),
+    colormapRangeValues: byId("colormap-range-values"),
     globalOpacitySlider: byId("global-opacity-slider"),
     globalOpacityInput: byId("global-opacity-input"),
     showBoundingBox: byId("showBoundingBox"),

@@ -245,18 +245,15 @@
                 <div class="range__thumb" id="colormap-range-max" data-handle="max" aria-label="Colormap range maximum"></div>
               </div>
               <div class="range__meta">
-                <span>Colormap range</span>
-                <span class="range__values">
-                  <input id="colormap-range-left" class="num range__value" type="number" step="any" aria-label="Colormap range minimum value" />
-                  <span aria-hidden="true">–</span>
-                  <input id="colormap-range-right" class="num range__value" type="number" step="any" aria-label="Colormap range maximum value" />
+                <span class="range__title">
+                  Colormap range
+                  <label class="range__lock" title="Lock the colormap range to the transparency range">
+                    <input id="colormap-range-map-toggle" type="checkbox" />
+                    Lock
+                  </label>
                 </span>
+                <span class="mono" id="colormap-range-values">0 – 255</span>
               </div>
-            </div>
-
-            <div class="field">
-              <span>Lock range to transparency</span>
-              <button class="toggle" id="colormap-range-map-toggle" type="button" role="switch" aria-checked="false" aria-label="Lock the colormap range to the transparency range"></button>
             </div>
 
             <div class="row opacity-row" id="opacity-row">
