@@ -946,6 +946,7 @@ function main() {
 
   view3D.setLoadErrorHandler((_volume, error) => {
     setVolumeLoading(false);
+    scaleSelectApi?.stopLoading();
     if (error instanceof Error && error.message === SCALE_TOO_LARGE_MESSAGE) {
       setScaleError(SCALE_TOO_LARGE_MESSAGE);
       scaleSelectApi?.setSelection("auto");
