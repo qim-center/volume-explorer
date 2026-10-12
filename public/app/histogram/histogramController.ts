@@ -85,14 +85,19 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const formatTag = (binIndex: number): string =>
       formatHistogramValue(hist.getValueFromBinIndex(binIndex), handleStep, valueMaxAbs);
 
-    if (minTag) {
-      minTag.textContent = formatTag(minBin);
-      minTag.style.left = `${(minBin / binCount) * 100}%`;
-    }
-    if (maxTag) {
-      maxTag.textContent = formatTag(maxBin);
-      maxTag.style.left = `${(maxBin / binCount) * 100}%`;
-    }
+    // tags are centred on their handle; long (scientific) labels are shifted at the edges
+    const placeTag = (tag: HTMLElement | null, binIndex: number): void => {
+      if (!tag) {
+        return;
+      }
+      tag.textContent = formatTag(binIndex);
+      const x = (binIndex / binCount) * displayWidth;
+      const reach = Math.max(0, tag.offsetWidth / 2);
+      const clamped = displayWidth > 2 * reach ? Math.min(Math.max(x, reach), displayWidth - reach) : x;
+      tag.style.left = displayWidth > 0 ? `${clamped}px` : `${(binIndex / binCount) * 100}%`;
+    };
+    placeTag(minTag, minBin);
+    placeTag(maxTag, maxBin);
   };
 
   const drawHistogramFromVolume = (volume: Volume, channelIndex: number): void => {

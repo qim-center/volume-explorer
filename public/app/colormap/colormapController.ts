@@ -3,13 +3,11 @@ import { View3d, Volume, ColorizeFeature, Lut, LUT_ENTRIES } from "../../../src"
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "../../colorizer";
 import { createDualSlider, DualSlider } from "../ui/dualSlider";
 import { ACCENT_COLORMAP_POSITION } from "../state/stateService";
-import { formatColormapRangeValue, histogramValueToLut, lutToHistogramValue } from "../utils/math";
 
 const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
 const LUT_MAX = LUT_ENTRIES - 1;
 
 type ColormapRange = { minBin: number; maxBin: number };
-type RangeHandle = "min" | "max";
 
 const getInput = (id: string) => document.getElementById(id) as HTMLInputElement | null;
 
@@ -102,22 +100,9 @@ export function createColormapController(options: ColormapControllerOptions) {
 
   let colormapRangeSlider: DualSlider | null = null;
 
-  const syncColormapRangeValues = (volume: Volume, minLut: number, maxLut: number): void => {
-    const locked = state.colormapRangeMapped;
-    const histogram = volume?.getChannel(0)?.loaded ? volume.getHistogram(0) : null;
-
-    const syncValueBox = (id: string, lut: number) => {
-      const valueBox = getInput(id);
-      if (!valueBox) {
-        return;
-      }
-      valueBox.disabled = locked;
-      if (histogram) {
-        valueBox.value = formatColormapRangeValue(lutToHistogramValue(histogram, lut));
-      }
-    };
-    syncValueBox("colormap-range-left", minLut);
-    syncValueBox("colormap-range-right", maxLut);
+  const syncColormapRangeValues = (minLut: number, maxLut: number): void => {
+    const values = document.getElementById("colormap-range-values") as HTMLElement | null;
+    values?.replaceChildren(`${Math.round(minLut)} – ${Math.round(maxLut)}`);
   };
 
   const syncColormapRangeUi = (volume: Volume): void => {
@@ -125,12 +110,15 @@ export function createColormapController(options: ColormapControllerOptions) {
     const locked = state.colormapRangeMapped;
 
     colormapRangeSlider?.set(minBin, maxBin);
-    syncColormapRangeValues(volume, minBin, maxBin);
+    syncColormapRangeValues(minBin, maxBin);
 
     const rangeHost = document.getElementById("colormap-range");
     rangeHost?.classList.toggle("is-disabled", locked);
     rangeHost?.setAttribute("aria-disabled", String(locked));
-    document.getElementById("colormap-range-map-toggle")?.setAttribute("aria-checked", String(locked));
+    const mapToggle = getInput("colormap-range-map-toggle");
+    if (mapToggle) {
+      mapToggle.checked = locked;
+    }
   };
 
   const applyColormapToChannel = (volume: Volume, channelIndex: number): void => {
@@ -318,7 +306,6 @@ export function createColormapController(options: ColormapControllerOptions) {
       onColormapChange?.();
     };
 
-    // The range is kept in LUT units. The slider moves in whole units, manual input can land in between.
     const applyRange = (min: number, max: number): void => {
       state.colormapMin = min;
       state.colormapMax = max;
@@ -332,7 +319,7 @@ export function createColormapController(options: ColormapControllerOptions) {
       onChange: (minValue, maxValue) => {
         state.colormapMin = Math.round(minValue);
         state.colormapMax = Math.round(maxValue);
-        syncColormapRangeValues(getVolume(), state.colormapMin, state.colormapMax);
+        syncColormapRangeValues(state.colormapMin, state.colormapMax);
       },
     });
 
@@ -343,40 +330,9 @@ export function createColormapController(options: ColormapControllerOptions) {
       applyRange(state.colormapMin, state.colormapMax);
     });
 
-    const setupValueBox = (id: string, handle: RangeHandle) => {
-      const valueBox = getInput(id);
-      if (!valueBox) {
-        return;
-      }
-      valueBox.addEventListener("change", () => {
-        const volume = getVolume();
-        const value = valueBox.value.trim() === "" ? NaN : Number(valueBox.value);
-        if (Number.isFinite(value) && volume?.getChannel(0)?.loaded) {
-          const lut = histogramValueToLut(volume.getHistogram(0), value);
-          if (handle === "min") {
-            applyRange(Math.min(lut, state.colormapMax), state.colormapMax);
-          } else {
-            applyRange(state.colormapMin, Math.max(lut, state.colormapMin));
-          }
-        } else {
-          syncColormapRangeUi(volume);
-        }
-      });
-      valueBox.addEventListener("focus", () => valueBox.select());
-      valueBox.addEventListener("click", () => valueBox.select());
-      valueBox.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          valueBox.blur();
-        }
-      });
-    };
-    setupValueBox("colormap-range-left", "min");
-    setupValueBox("colormap-range-right", "max");
-
-    const mapToggle = document.getElementById("colormap-range-map-toggle") as HTMLButtonElement | null;
-    mapToggle?.addEventListener("click", () => {
-      state.colormapRangeMapped = !state.colormapRangeMapped;
+    const mapToggle = getInput("colormap-range-map-toggle");
+    mapToggle?.addEventListener("change", () => {
+      state.colormapRangeMapped = mapToggle.checked;
       refresh();
     });
 
