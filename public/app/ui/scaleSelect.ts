@@ -12,6 +12,7 @@ export interface ScaleSelectApi {
   rebuild: (volume: Volume) => void;
   refreshLabel: (volume: Volume) => void;
   setSelection: (value: string) => void;
+  stopLoading: () => void;
 }
 
 export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectApi {
@@ -36,9 +37,31 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
     }
   };
 
+  // volumes that have been fully loaded at least once
+  const displayedVolumes = new WeakSet<Volume>();
+
+  const stopLoading = (): void => {
+    button.classList.remove("is-loading");
+    button.removeAttribute("aria-busy");
+  };
+
+  // show the spinner only while a displayed volume is loading new data
+  const refreshLoading = (volume: Volume): void => {
+    if (volume.isLoaded()) {
+      displayedVolumes.add(volume);
+    }
+    const loading = !volume.isLoaded() && displayedVolumes.has(volume);
+    button.classList.toggle("is-loading", loading);
+    if (loading) {
+      button.setAttribute("aria-busy", "true");
+    } else {
+      button.removeAttribute("aria-busy");
+    }
+  };
+
   const refreshLabel = (volume: Volume): void => {
     const totalLevels = volume.imageInfo.numMultiscaleLevels;
-    const currentLevel = volume.imageInfo.multiscaleLevel;
+    const currentLevel = volume.getRequestedLevel() ?? volume.imageInfo.multiscaleLevel;
     const explicit = volume.loadSpecRequired.useExplicitLevel;
 
     let text = "Auto";
@@ -47,6 +70,7 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
       text = explicit ? `Level ${currentLevel} · ${resolved}` : `Auto · ${resolved}`;
     }
     button.querySelector("#ome-zarr-scale-select-text")?.replaceChildren(text);
+    refreshLoading(volume);
   };
 
   const rebuild = (volume: Volume): void => {
@@ -90,8 +114,10 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
 
     onShowError();
     markSelection(value);
+    const pending = applyScaleLevel(level);
+    refreshLabel(volume);
     try {
-      await applyScaleLevel(level);
+      await pending;
     } catch (error) {
       console.error(error);
     }
@@ -126,5 +152,6 @@ export function setupScaleSelect(options: SetupScaleSelectOptions): ScaleSelectA
     rebuild,
     refreshLabel,
     setSelection: (value: string) => markSelection(value),
+    stopLoading,
   };
 }

@@ -80,6 +80,11 @@ button { font-family: inherit; cursor: pointer; }
   border: 1px solid var(--border); border-radius: var(--r-control); background: var(--surface);
   font-size: 13px; color: var(--ink); white-space: nowrap; }
 .select__chevron { color: var(--label); display: inline-flex; }
+/* replaces the chevron while a new scale level is loading */
+.select__spinner { display: none; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid var(--track); border-top-color: var(--accent); animation: volume-spin .8s linear infinite; }
+.select.is-loading .select__spinner { display: inline-block; }
+.select.is-loading .select__chevron { display: none; }
 .btn-export { min-height: 40px; margin-left: 6px; padding: 0 14px; border: 0; border-radius: var(--r-control);
   display: flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; font: 500 13px var(--font); flex: none; }
 .btn-export:hover { filter: brightness(0.92); }

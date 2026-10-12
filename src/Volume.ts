@@ -178,6 +178,10 @@ export default class Volume {
     return getLoadableLevels(this.levelDimsZYX, maxAtlasEdge, subregion);
   }
 
+  getRequestedLevel(): number | undefined {
+    return this.requestedLevel;
+  }
+
   hasLoadStarted(): boolean {
     return this.requestedLevel !== undefined;
   }
