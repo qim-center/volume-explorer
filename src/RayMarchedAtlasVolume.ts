@@ -1,15 +1,9 @@
 import {
-  Box3,
-  Box3Helper,
   BoxGeometry,
-  BufferAttribute,
   BufferGeometry,
-  Color,
   DataTexture,
   DepthTexture,
   Group,
-  LineBasicMaterial,
-  LineSegments,
   Material,
   Matrix4,
   Mesh,
@@ -20,11 +14,11 @@ import {
   ShaderMaterial,
   Texture,
   Vector2,
-  Vector3,
   WebGLRenderer,
 } from "three";
 
 import FusedChannelData from "./FusedChannelData.js";
+import GridLines from "./GridLines.js";
 import {
   rayMarchingVertexShaderSrc,
   rayMarchingFragmentShaderSrc,
@@ -37,16 +31,13 @@ import type { VolumeRenderImpl } from "./VolumeRenderImpl.js";
 import type { FuseChannel } from "./types.js";
 import { VolumeRenderSettings, SettingsFlags } from "./VolumeRenderSettings.js";
 
-const BOUNDING_BOX_DEFAULT_COLOR = new Color(0xffff00);
-
 export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
   private settings: VolumeRenderSettings;
   public volume: Volume;
 
   private geometry: BoxGeometry;
   private geometryMesh: Mesh<BufferGeometry, Material>;
-  private boxHelper: Box3Helper;
-  private tickMarksMesh: LineSegments;
+  private gridLines: GridLines;
   private geometryTransformNode: Group;
   private uniforms: ReturnType<typeof rayMarchingShaderUniforms>;
   private channelData!: FusedChannelData;
@@ -64,23 +55,12 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     this.uniforms = rayMarchingShaderUniforms();
     [this.geometry, this.geometryMesh] = this.createGeometry(this.uniforms);
 
-    this.boxHelper = new Box3Helper(
-      new Box3(new Vector3(-0.5, -0.5, -0.5), new Vector3(0.5, 0.5, 0.5)),
-      BOUNDING_BOX_DEFAULT_COLOR
-    );
-    this.boxHelper.updateMatrixWorld();
-    this.boxHelper.visible = false;
-
-    this.tickMarksMesh = new LineSegments(
-      new BufferGeometry(),
-      new LineBasicMaterial({ color: BOUNDING_BOX_DEFAULT_COLOR })
-    );
-    this.tickMarksMesh.visible = false;
+    this.gridLines = new GridLines();
 
     this.geometryTransformNode = new Group();
     this.geometryTransformNode.name = "VolumeContainerNode";
 
-    this.geometryTransformNode.add(this.boxHelper, this.tickMarksMesh, this.geometryMesh);
+    this.geometryTransformNode.add(this.gridLines, this.geometryMesh);
 
     this.emptyPositionTex = new DataTexture(new Uint8Array(Array(16).fill(0)), 2, 2);
 
@@ -148,18 +128,11 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     }
 
     if (dirtyFlags & SettingsFlags.VIEW || dirtyFlags & SettingsFlags.BOUNDING_BOX) {
-      // Update tick marks with either view or bounding box changes
-      this.tickMarksMesh.visible = this.settings.showBoundingBox && !this.settings.isOrtho;
       this.setUniform("maxProject", this.settings.maxProjectMode ? 1 : 0);
     }
 
-    if (dirtyFlags & SettingsFlags.BOUNDING_BOX) {
-      // Configure bounding box
-      this.boxHelper.visible = this.settings.showBoundingBox;
-      const colorVector = this.settings.boundingBoxColor;
-      const newBoxColor = new Color(colorVector[0], colorVector[1], colorVector[2]);
-      (this.boxHelper.material as LineBasicMaterial).color = newBoxColor;
-      (this.tickMarksMesh.material as LineBasicMaterial).color = newBoxColor;
+    if (dirtyFlags & (SettingsFlags.VIEW | SettingsFlags.BOUNDING_BOX | SettingsFlags.ROI)) {
+      this.gridLines.update(this.volume, this.settings);
     }
 
     if (dirtyFlags & SettingsFlags.TRANSFORM) {
@@ -194,8 +167,6 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
 
       this.setUniform("AABB_CLIP_MIN", bmin);
       this.setUniform("AABB_CLIP_MAX", bmax);
-
-      this.updateGrid();
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {
@@ -241,84 +212,9 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     return [geom, mesh];
   }
 
-  private updateGrid(): void {
-    const { bounds, scale } = this.settings;
-    const { normPhysicalSize, physicalScale } = this.volume;
-
-    const fullRegionScale = normPhysicalSize.clone().multiply(scale);
-    const min = bounds.bmin.clone().multiply(fullRegionScale);
-    const max = bounds.bmax.clone().multiply(fullRegionScale).max(min);
-    this.boxHelper.box.set(min, max);
-
-    const size = max.clone().sub(min);
-    const tickLength = 0.025 * Math.max(size.x, size.y, size.z);
-    const tickMarkPhysicalLength = this.volume.getRegionTickMarkPhysicalLength(bounds.bmin, bounds.bmax);
-    const tickSpacing = scale.clone().multiplyScalar(tickMarkPhysicalLength / physicalScale);
-    const numTicks = size.clone().divide(tickSpacing).floor();
-
-    const vertices: number[] = [];
-
-    for (let i = 0; i <= numTicks.x; i++) {
-      const x = min.x + i * tickSpacing.x;
-      // prettier-ignore
-      vertices.push(
-        x, max.y,              max.z,
-        x, max.y + tickLength, max.z,
-
-        x, min.y,              min.z,
-        x, min.y - tickLength, min.z,
-
-        x, max.y,              min.z,
-        x, max.y + tickLength, min.z,
-
-        x, min.y,              max.z,
-        x, min.y - tickLength, max.z,
-      );
-    }
-
-    for (let i = 0; i <= numTicks.y; i++) {
-      const y = max.y - i * tickSpacing.y;
-      // prettier-ignore
-      vertices.push(
-        min.x,              y, max.z,
-        min.x - tickLength, y, max.z,
-
-        min.x,              y, min.z,
-        min.x - tickLength, y, min.z,
-
-        max.x,              y, min.z,
-        max.x + tickLength, y, min.z,
-
-        max.x,              y, max.z,
-        max.x + tickLength, y, max.z,
-      );
-    }
-
-    for (let i = 0; i <= numTicks.z; i++) {
-      const z = max.z - i * tickSpacing.z;
-      // prettier-ignore
-      vertices.push(
-        min.x,              max.y, z,
-        min.x - tickLength, max.y, z,
-
-        min.x,              min.y, z,
-        min.x - tickLength, min.y, z,
-
-        max.x,              min.y, z,
-        max.x + tickLength, min.y, z,
-
-        max.x,              max.y, z,
-        max.x + tickLength, max.y, z,
-      );
-    }
-
-    this.tickMarksMesh.geometry.dispose();
-    this.tickMarksMesh.geometry = new BufferGeometry();
-    this.tickMarksMesh.geometry.setAttribute("position", new BufferAttribute(new Float32Array(vertices), 3));
-  }
-
   public cleanup(): void {
     this.geometry.dispose();
+    this.gridLines.cleanup();
     this.geometryMesh.material.dispose();
 
     this.channelData.cleanup();
