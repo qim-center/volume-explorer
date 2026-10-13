@@ -161,6 +161,10 @@ export abstract class ThreadableVolumeLoader implements IVolumeLoader {
     loadSpecOverride?: LoadSpec,
     onChannelLoaded?: PerChannelCallback
   ): Promise<void> {
+    if (volume.loader === this && !volume.hasLoadStarted()) {
+      return volume.load(onChannelLoaded, loadSpecOverride);
+    }
+
     const onUpdateMetadata = (imageInfo?: ImageInfo, loadSpec?: LoadSpec): void => {
       if (imageInfo) {
         volume.imageInfo = new CImageInfo(imageInfo);

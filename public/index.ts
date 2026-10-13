@@ -41,7 +41,7 @@ import { createHistogramController } from "./app/histogram/histogramController";
 import { createColormapController } from "./app/colormap/colormapController";
 import { createLoaderOrchestration } from "./app/loaders/loaderOrchestration";
 import { rgb01ToHex } from "./app/utils/color";
-import { densitySliderToView3D, gammaSliderToImageValues } from "./app/utils/math";
+import { densitySliderToView3D, gammaSliderToImageValues, histogramBinToLut } from "./app/utils/math";
 import { inferVolumeFileFormat } from "./app/utils/source";
 
 const CACHE_MAX_SIZE = 1_000_000_000;
@@ -116,7 +116,10 @@ const cropSliceManager = createCropSliceManager({
   state: myState,
   getView3D: () => view3D,
   goToZSlice,
-  onCropRegionApplied: () => syncCropHandlesFromState(),
+  onCropRegionApplied: () => {
+    syncCropHandlesFromState();
+    updateOmeZarrScaleSelect(myState.volume);
+  },
 });
 
 function applyCropRegionFromState() {
@@ -138,10 +141,6 @@ function syncCropHandlesFromState() {
   if (view3D) {
     view3D.setCropHandlesRegion(getCropRegionFromState());
   }
-}
-
-function getEffectiveAxisLoadBounds(axis: "x" | "y" | "z") {
-  return cropSliceManager.getEffectiveAxisLoadBounds(axis);
 }
 
 function remapSliceIndicesForRescaledVolume(volume: Volume) {
@@ -363,7 +362,7 @@ function showChannelUI(volume: Volume) {
           if (j === 0) {
             const hist = volume.getHistogram(j) as any;
             const bins = hist?.bins ?? hist?.histogram;
-            const maxBin = bins ? bins.length - 1 : 0;
+            const maxBin = bins ? bins.length : 0;
             histogramSelection.minBin = 0;
             histogramSelection.maxBin = maxBin;
             drawHistogramFromVolume(volume, 0);
@@ -703,7 +702,6 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   updateSliceSelectorUI();
   applyCropRegionFromState();
 
-  updateOmeZarrScaleSelect(v);
   view3D.redraw();
 }
 
@@ -745,7 +743,6 @@ function onVolumeCreated(name: string, volume: Volume) {
   syncCropInputsFromState();
   applyCropRegionFromState();
   showChannelUI(myState.volume);
-  updateOmeZarrScaleSelect(myState.volume);
 }
 
 function setSyncMultichannelLoading(sync: boolean) {
@@ -828,11 +825,7 @@ function applyHistogramLutFromBins(channelIndex: number) {
 }
 
 function scaleHistogramBinToLut(volume: Volume, channelIndex: number, bin: number): number {
-  const hist = volume.getHistogram(channelIndex) as any;
-  const bins = hist?.bins ?? hist?.histogram;
-  const numBins = bins?.length;
-  const scale = numBins && numBins > 1 ? 255 / (numBins - 1) : 1;
-  return Math.round(bin * scale);
+  return histogramBinToLut(volume.getHistogram(channelIndex), bin);
 }
 
 function applyColormapToChannel(volume: Volume, channelIndex: number): void {
@@ -936,46 +929,9 @@ function main() {
 
   const setScaleError = (warning?: string) => setUiNote(warning);
 
-  const getMaxTextureEdge = (): number => {
-    const probeCanvas = document.createElement("canvas");
-    const gl = probeCanvas.getContext("webgl2") || probeCanvas.getContext("webgl");
-    if (!gl) {
-      return 4096;
-    }
-    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-    return Number.isFinite(maxTextureSize) && maxTextureSize > 0 ? maxTextureSize : 4096;
-  };
-
-  const maxTextureEdge = getMaxTextureEdge();
-
-  const canLevelFitInAtlas = (level: number): boolean => {
-    const dims = myState.volume.imageInfo.imageInfo.multiscaleLevelDims[level];
-    if (!dims) {
-      return true;
-    }
-
-    const xLoadBounds = getEffectiveAxisLoadBounds("x");
-    const yLoadBounds = getEffectiveAxisLoadBounds("y");
-    const zLoadBounds = getEffectiveAxisLoadBounds("z");
-
-    const cropX = Math.max(1 / Math.max(1, dims.shape[4]), xLoadBounds.max - xLoadBounds.min);
-    const cropY = Math.max(1 / Math.max(1, dims.shape[3]), yLoadBounds.max - yLoadBounds.min);
-    const cropZ = Math.max(1 / Math.max(1, dims.shape[2]), zLoadBounds.max - zLoadBounds.min);
-
-    const x = Math.max(1, Math.ceil(dims.shape[4] * cropX));
-    const y = Math.max(1, Math.ceil(dims.shape[3] * cropY));
-    const z = Math.max(1, Math.ceil(dims.shape[2] * cropZ));
-    const xtiles = Math.floor(maxTextureEdge / x);
-    const ytiles = Math.floor(maxTextureEdge / y);
-    return xtiles > 0 && ytiles > 0 && z <= xtiles * ytiles;
-  };
-
+  // levels that don't fit are disabled in the dropdown, so any level picked here can be loaded
   const applyScaleLevel = async (level?: number): Promise<void> => {
-    await myState.volume.updateRequiredData({
-      useExplicitLevel: level !== undefined,
-      multiscaleLevel: level,
-      maxAtlasEdge: maxTextureEdge,
-    });
+    await myState.volume.updateRequiredData({ useExplicitLevel: level !== undefined, multiscaleLevel: level });
   };
 
   if (ui.omeZarrScaleSelect && ui.omeZarrScaleOptions) {
@@ -984,13 +940,13 @@ function main() {
       optionsList: ui.omeZarrScaleOptions,
       getVolume: () => myState.volume,
       applyScaleLevel,
-      canLevelFitInAtlas,
       onShowError: setScaleError,
     });
   }
 
   view3D.setLoadErrorHandler((_volume, error) => {
     setVolumeLoading(false);
+    scaleSelectApi?.stopLoading();
     if (error instanceof Error && error.message === SCALE_TOO_LARGE_MESSAGE) {
       setScaleError(SCALE_TOO_LARGE_MESSAGE);
       scaleSelectApi?.setSelection("auto");
@@ -1205,7 +1161,10 @@ function main() {
     getVolume: () => myState.volume,
     getView3D: () => view3D,
     getColormapStops: () => colormapController?.getColormapStops() ?? null,
-    getColormapRange: () => ({ min: myState.colormapMin, max: myState.colormapMax }),
+    getColormapRange: () => {
+      const range = colormapController?.getChannelColormapRange(myState.volume, 0);
+      return { min: range?.minBin ?? myState.colormapMin, max: range?.maxBin ?? myState.colormapMax };
+    },
     onLutUpdated: (volume, channelIndex) => {
       applyColormapToChannel(volume, channelIndex);
     },
@@ -1227,7 +1186,6 @@ function main() {
     state: myState,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
-    getColormapRange: () => ({ minBin: myState.colormapMin, maxBin: myState.colormapMax }),
     onColormapChange: () => {
       histogramController?.drawHistogramFromVolume(myState.volume, 0);
     },

@@ -61,7 +61,8 @@ export function unitNameToSymbol(unitName?: string): string | null {
 
 // We want to find the most "square" packing of z tw by th tiles.
 // Compute number of rows and columns.
-export function computePackedAtlasDims(z: number, tw: number, th: number): Vector2 {
+// If `maxAtlasEdge` is given, the atlas is kept within it whenever the tiles can be packed that way at all.
+export function computePackedAtlasDims(z: number, tw: number, th: number, maxAtlasEdge?: number): Vector2 {
   let nextrows = 1;
   let nextcols = z;
   let ratio = (nextcols * tw) / (nextrows * th);
@@ -73,6 +74,19 @@ export function computePackedAtlasDims(z: number, tw: number, th: number): Vecto
     nextcols -= 1;
     nextrows = Math.ceil(z / nextcols);
     ratio = (nextcols * tw) / (nextrows * th);
+  }
+
+  if (maxAtlasEdge !== undefined) {
+    // The squarest packing can be slightly wider (or taller) than the limit even when a packing along the limit fits
+    const maxCols = Math.max(1, Math.floor(maxAtlasEdge / tw));
+    const maxRows = Math.max(1, Math.floor(maxAtlasEdge / th));
+    if (ncols > maxCols) {
+      ncols = maxCols;
+      nrows = Math.ceil(z / ncols);
+    } else if (nrows > maxRows) {
+      nrows = maxRows;
+      ncols = Math.ceil(z / nrows);
+    }
   }
   return new Vector2(ncols, nrows);
 }
@@ -190,6 +204,12 @@ export function pickLevelToLoadUnscaled(loadSpec: LoadSpec, spatialDimsZYX: ZYX[
 export function pickLevelToLoad(loadSpec: LoadSpec, spatialDimsZYX: ZYX[]): PickLevelResult {
   const scaledDims = scaleMultipleDimsToSubregion(loadSpec.subregion, spatialDimsZYX);
   return pickLevelToLoadUnscaled(loadSpec, scaledDims);
+}
+
+export function getLoadableLevels(spatialDimsZYX: ZYX[], maxAtlasEdge: number, subregion: Box3): boolean[] {
+  return scaleMultipleDimsToSubregion(subregion, spatialDimsZYX).map(
+    (dims) => spatialDimsZYX.length <= 1 || doesSpatialDimensionFitInAtlas(dims, maxAtlasEdge)
+  );
 }
 
 /** Given the size of a volume in pixels, convert a `Box3` in the 0-1 range to pixels */

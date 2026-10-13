@@ -1,15 +1,21 @@
 import { Color } from "three";
-import { View3d, Volume, ColorizeFeature, LUT_ENTRIES } from "../../../src";
+import { View3d, Volume, ColorizeFeature, Lut, LUT_ENTRIES } from "../../../src";
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "../../colorizer";
 import { createDualSlider, DualSlider } from "../ui/dualSlider";
 import { ACCENT_COLORMAP_POSITION } from "../state/stateService";
 
 const LUT_ARRAY_LENGTH = LUT_ENTRIES * 4;
+const LUT_MAX = LUT_ENTRIES - 1;
+
+type ColormapRange = { minBin: number; maxBin: number };
+
+const getInput = (id: string) => document.getElementById(id) as HTMLInputElement | null;
 
 interface ColormapControllerState {
   colormap: string;
   colormapMin: number;
   colormapMax: number;
+  colormapRangeMapped: boolean;
   colormapInverted: boolean;
   colorizeEnabled: boolean;
   colorizeChannel: number;
@@ -23,12 +29,11 @@ interface ColormapControllerOptions {
   state: ColormapControllerState;
   getVolume: () => Volume;
   getView3D: () => View3d;
-  getColormapRange?: () => { minBin: number; maxBin: number };
   onColormapChange?: () => void;
 }
 
 export function createColormapController(options: ColormapControllerOptions) {
-  const { state, getVolume, getView3D, getColormapRange, onColormapChange } = options;
+  const { state, getVolume, getView3D, onColormapChange } = options;
 
   const sampleColormapStops = (stopColors: Color[], t: number): [number, number, number] => {
     if (stopColors.length === 0) {
@@ -54,18 +59,16 @@ export function createColormapController(options: ColormapControllerOptions) {
   const buildColormapPalette = (
     stops: string[],
     alphaLut: Uint8Array,
-    minBin?: number,
-    maxBin?: number,
-    inverted?: boolean
+    minBin: number,
+    maxBin: number,
+    inverted: boolean
   ): Uint8Array => {
     const palette = new Uint8Array(LUT_ARRAY_LENGTH);
     const stopColors = stops.map((stop) => new Color(stop));
-    const lo = minBin ?? 0;
-    const hi = maxBin ?? LUT_ENTRIES - 1;
-    const range = hi - lo || 1;
+    const range = maxBin - minBin || 1;
 
     for (let i = 0; i < LUT_ENTRIES; i++) {
-      const t = (i - lo) / range;
+      const t = (i - minBin) / range;
       const [r, g, b] = sampleColormapStops(stopColors, inverted ? 1 - t : t);
       const offset = i * 4;
       palette[offset] = r;
@@ -77,13 +80,57 @@ export function createColormapController(options: ColormapControllerOptions) {
     return palette;
   };
 
-  const applyColormapToChannel = (volume: Volume, channelIndex: number, minBin?: number, maxBin?: number): void => {
+  const getTransparencyRange = (lut: Lut): ColormapRange | null => {
+    let minBin: number | null = null;
+    for (const controlPoint of lut.controlPoints) {
+      if (controlPoint.opacity <= 0) {
+        minBin = controlPoint.x;
+      } else if (controlPoint.opacity >= 1) {
+        return minBin !== null && controlPoint.x > minBin ? { minBin, maxBin: controlPoint.x } : null;
+      }
+    }
+    return null;
+  };
+
+  const getChannelColormapRange = (volume: Volume, channelIndex: number): ColormapRange => {
+    const channel = state.colormapRangeMapped ? volume?.getChannel(channelIndex) : null;
+    const lockedRange = channel?.loaded ? getTransparencyRange(channel.lut) : null;
+    return lockedRange ?? { minBin: state.colormapMin, maxBin: state.colormapMax };
+  };
+
+  let colormapRangeSlider: DualSlider | null = null;
+
+  const syncColormapRangeValues = (minLut: number, maxLut: number): void => {
+    const values = document.getElementById("colormap-range-values") as HTMLElement | null;
+    values?.replaceChildren(`${Math.round(minLut)} – ${Math.round(maxLut)}`);
+  };
+
+  const syncColormapRangeUi = (volume: Volume): void => {
+    const { minBin, maxBin } = getChannelColormapRange(volume, 0);
+    const locked = state.colormapRangeMapped;
+
+    colormapRangeSlider?.set(minBin, maxBin);
+    syncColormapRangeValues(minBin, maxBin);
+
+    const rangeHost = document.getElementById("colormap-range");
+    rangeHost?.classList.toggle("is-disabled", locked);
+    rangeHost?.setAttribute("aria-disabled", String(locked));
+    const mapToggle = getInput("colormap-range-map-toggle");
+    if (mapToggle) {
+      mapToggle.checked = locked;
+    }
+  };
+
+  const applyColormapToChannel = (volume: Volume, channelIndex: number): void => {
     if (!volume) {
       return;
     }
     const channel = volume.getChannel(channelIndex);
     if (!channel || !channel.loaded) {
       return;
+    }
+    if (channelIndex === 0) {
+      syncColormapRangeUi(volume);
     }
 
     const channelGui = state.channelGui[channelIndex];
@@ -98,14 +145,8 @@ export function createColormapController(options: ColormapControllerOptions) {
       return;
     }
 
-    const range = getColormapRange?.();
-    const palette = buildColormapPalette(
-      colormap.stops,
-      channel.lut.lut,
-      minBin ?? range?.minBin,
-      maxBin ?? range?.maxBin,
-      state.colormapInverted
-    );
+    const { minBin, maxBin } = getChannelColormapRange(volume, channelIndex);
+    const palette = buildColormapPalette(colormap.stops, channel.lut.lut, minBin, maxBin, state.colormapInverted);
     volume.setColorPalette(channelIndex, palette);
     volume.setColorPaletteAlpha(channelIndex, 1);
   };
@@ -250,51 +291,52 @@ export function createColormapController(options: ColormapControllerOptions) {
     return { closePicker };
   };
 
-  let colormapRangeSlider: DualSlider | null = null;
-
-  const syncColormapRangeUI = (): void => {
-    colormapRangeSlider?.set(state.colormapMin, state.colormapMax);
-    const values = document.getElementById("colormap-range-values") as HTMLElement | null;
-    values?.replaceChildren(`${Math.round(state.colormapMin)} – ${Math.round(state.colormapMax)}`);
-  };
-
-  const applyColormapRange = (minValue: number, maxValue: number): void => {
-    state.colormapMin = Math.round(minValue);
-    state.colormapMax = Math.round(maxValue);
-    syncColormapRangeUI();
-    const volume = getVolume();
-    if (volume) {
-      applyColormapToVolume(volume);
-    }
-    onColormapChange?.();
-  };
-
   const setupColormapRangeControls = (): void => {
     const rangeHost = document.getElementById("colormap-range") as HTMLElement | null;
     if (!rangeHost) {
       return;
     }
 
+    const refresh = (): void => {
+      const volume = getVolume();
+      syncColormapRangeUi(volume);
+      if (volume) {
+        applyColormapToVolume(volume);
+      }
+      onColormapChange?.();
+    };
+
+    const applyRange = (min: number, max: number): void => {
+      state.colormapMin = min;
+      state.colormapMax = max;
+      refresh();
+    };
+
     colormapRangeSlider = createDualSlider({
       host: rangeHost,
       min: 0,
-      max: 255,
+      max: LUT_MAX,
       onChange: (minValue, maxValue) => {
         state.colormapMin = Math.round(minValue);
         state.colormapMax = Math.round(maxValue);
-        const values = document.getElementById("colormap-range-values") as HTMLElement | null;
-        values?.replaceChildren(`${state.colormapMin} – ${state.colormapMax}`);
+        syncColormapRangeValues(state.colormapMin, state.colormapMax);
       },
     });
 
     rangeHost.addEventListener("pointerup", () => {
-      applyColormapRange(state.colormapMin, state.colormapMax);
+      applyRange(state.colormapMin, state.colormapMax);
     });
     rangeHost.addEventListener("pointercancel", () => {
-      applyColormapRange(state.colormapMin, state.colormapMax);
+      applyRange(state.colormapMin, state.colormapMax);
     });
 
-    syncColormapRangeUI();
+    const mapToggle = getInput("colormap-range-map-toggle");
+    mapToggle?.addEventListener("change", () => {
+      state.colormapRangeMapped = mapToggle.checked;
+      refresh();
+    });
+
+    syncColormapRangeUi(getVolume());
   };
 
   const setupColormapChipControl = (): void => {
@@ -408,6 +450,7 @@ export function createColormapController(options: ColormapControllerOptions) {
   return {
     applyColormapToChannel,
     applyColormapToVolume,
+    getChannelColormapRange,
     getStateColorizeFeature,
     setColormapInUrl,
     getColormapStops: (): string[] | null => getOrderedColormapStops(state.colormap),

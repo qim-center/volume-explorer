@@ -1,7 +1,7 @@
 import { Color } from "three";
 import { Lut, View3d, Volume } from "../../../src";
 import { HistogramSelection } from "../state/stateService";
-import { histogramBinFromX } from "../utils/math";
+import { formatHistogramValue, histogramBinFromX, histogramBinToLut, lutToHistogramBin } from "../utils/math";
 
 interface HistogramControllerOptions {
   canvas: HTMLCanvasElement | null;
@@ -76,14 +76,28 @@ export function createHistogramController(options: HistogramControllerOptions) {
   };
 
   const updateTags = (hist: any, minBin: number, maxBin: number, binCount: number): void => {
-    if (minTag) {
-      minTag.textContent = `${Math.round(hist.getValueFromBinIndex(minBin))}`;
-      minTag.style.left = `${(minBin / binCount) * 100}%`;
-    }
-    if (maxTag) {
-      maxTag.textContent = `${Math.round(hist.getValueFromBinIndex(maxBin))}`;
-      maxTag.style.left = `${(maxBin / binCount) * 100}%`;
-    }
+    const valueMin = hist.getValueFromBinIndex(0);
+    const valueMax = hist.getValueFromBinIndex(binCount);
+    const valueMaxAbs = Math.max(Math.abs(valueMin), Math.abs(valueMax));
+    // the handles move per display pixel, so that is the precision worth showing
+    const displayWidth = canvas?.getBoundingClientRect().width ?? 0;
+    const handleStep = (valueMax - valueMin) / (displayWidth > 0 ? displayWidth : binCount);
+    const formatTag = (binIndex: number): string =>
+      formatHistogramValue(hist.getValueFromBinIndex(binIndex), handleStep, valueMaxAbs);
+
+    // tags are centred on their handle; long (scientific) labels are shifted at the edges
+    const placeTag = (tag: HTMLElement | null, binIndex: number): void => {
+      if (!tag) {
+        return;
+      }
+      tag.textContent = formatTag(binIndex);
+      const x = (binIndex / binCount) * displayWidth;
+      const reach = Math.max(0, tag.offsetWidth / 2);
+      const clamped = displayWidth > 2 * reach ? Math.min(Math.max(x, reach), displayWidth - reach) : x;
+      tag.style.left = displayWidth > 0 ? `${clamped}px` : `${(binIndex / binCount) * 100}%`;
+    };
+    placeTag(minTag, minBin);
+    placeTag(maxTag, maxBin);
   };
 
   const drawHistogramFromVolume = (volume: Volume, channelIndex: number): void => {
@@ -110,11 +124,11 @@ export function createHistogramController(options: HistogramControllerOptions) {
       return;
     }
 
-    bins[0] = 0;
+    const binCount = (i: number): number => (i === 0 ? 0 : bins[i]);
 
     let maxLog = 0;
     for (let i = 0; i < bins.length; i++) {
-      const v = Math.log1p(bins[i]);
+      const v = Math.log1p(binCount(i));
       if (v > maxLog) {
         maxLog = v;
       }
@@ -134,14 +148,13 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const stops = getColormapStops?.();
     if (stops && stops.length > 0) {
       stopColors = stops.map((stop) => new Color(stop));
-      const maxBinIndex = bins.length - 1;
       const range = getColormapRange?.() ?? { min: 0, max: 255 };
-      cmMin = maxBinIndex ? Math.round(range.min / 255 * maxBinIndex) : 0;
-      cmMax = maxBinIndex ? Math.round(range.max / 255 * maxBinIndex) : 0;
+      cmMin = lutToHistogramBin(hist, range.min);
+      cmMax = lutToHistogramBin(hist, range.max);
     }
 
     for (let i = 0; i < bins.length; i++) {
-      const v0 = Math.log1p(bins[i]) / maxLog;
+      const v0 = Math.log1p(binCount(i)) / maxLog;
       const barHeight = v0 * h;
       if (stopColors) {
         const t = (i - cmMin) / (cmMax - cmMin || 1);
@@ -224,11 +237,9 @@ export function createHistogramController(options: HistogramControllerOptions) {
     const min = selection.minBin;
     const max = selection.maxBin;
 
-    const hist = volume.getHistogram(channelIndex) as any;
-    const numBins = (hist.bins ?? hist.histogram)?.length;
-    const scale = numBins && numBins > 1 ? 255 / (numBins - 1) : 1;
-    const lutMin = Math.round(min * scale);
-    const lutMax = Math.round(max * scale);
+    const hist = volume.getHistogram(channelIndex);
+    const lutMin = histogramBinToLut(hist, min);
+    const lutMax = histogramBinToLut(hist, max);
 
     const view3d = getView3D();
     const lut = isHistogramDisabled() ? new Lut().createNoTransparency() : new Lut().createFromMinMax(lutMin, lutMax);

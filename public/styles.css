@@ -80,6 +80,11 @@ button { font-family: inherit; cursor: pointer; }
   border: 1px solid var(--border); border-radius: var(--r-control); background: var(--surface);
   font-size: 13px; color: var(--ink); white-space: nowrap; }
 .select__chevron { color: var(--label); display: inline-flex; }
+/* replaces the chevron while a new scale level is loading */
+.select__spinner { display: none; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid var(--track); border-top-color: var(--accent); animation: volume-spin .8s linear infinite; }
+.select.is-loading .select__spinner { display: inline-block; }
+.select.is-loading .select__chevron { display: none; }
 .btn-export { min-height: 40px; margin-left: 6px; padding: 0 14px; border: 0; border-radius: var(--r-control);
   display: flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; font: 500 13px var(--font); flex: none; }
 .btn-export:hover { filter: brightness(0.92); }
@@ -198,8 +203,12 @@ button { font-family: inherit; cursor: pointer; }
   left: var(--from); right: calc(100% - var(--to)); }
 .range__thumb { position: absolute; top: 0; left: var(--pos, 0); width: 16px; height: 16px; margin-left: -8px; border-radius: 8px;
   background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .3); cursor: pointer; }
+.range.is-disabled { opacity: .5; pointer-events: none; }
 .range__meta { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text-2); }
 .range__meta .mono { font-family: var(--mono); }
+.range__title { display: flex; align-items: center; gap: 10px; }
+.range__lock { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--label); cursor: pointer; }
+.range__lock input { margin: 0; accent-color: var(--accent); cursor: pointer; }
 
 .opacity-row { gap: 10px; }
 .opacity-label { font-size: 13px; min-width: 46px; }
@@ -229,6 +238,8 @@ button { font-family: inherit; cursor: pointer; }
   font: 13px var(--font); color: var(--ink); text-align: left; }
 .select__option:hover, .select__option:focus-visible { background: var(--surface-muted); }
 .select__option[aria-selected="true"] { font-weight: 500; }
+.select__option:disabled { color: var(--label); cursor: not-allowed; }
+.select__option:disabled:hover { background: none; }
 .select__options-anchor { position: relative; display: inline-flex; align-items: center; gap: 10px; }
 
 /* ---------- export menu (popover under the Export button) ---------- */

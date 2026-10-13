@@ -36,6 +36,57 @@ export function gammaSliderToImageValues(sliderValues: [number, number, number])
 export function histogramBinFromX(x: number, canvas: HTMLCanvasElement, binCount: number): number {
   const displayWidth = canvas.getBoundingClientRect().width;
   const t = x / displayWidth;
-  const b = Math.floor(t * binCount);
-  return Math.max(0, Math.min(binCount - 1, b));
+  // fractional, so the handles follow the cursor instead of snapping to bins
+  return Math.max(0, Math.min(binCount, t * binCount));
+}
+
+const LUT_MAX = 255;
+
+interface HistogramDataRange {
+  getDataMin(): number;
+  getDataMax(): number;
+  getValueFromBinIndex(binIndex: number): number;
+  findFractionalBinOfValue(value: number): number;
+}
+
+export function histogramBinToLut(histogram: HistogramDataRange, binIndex: number): number {
+  const min = histogram.getDataMin();
+  const range = histogram.getDataMax() - min;
+  if (!(range > 0)) {
+    return 0;
+  }
+  const lut = ((histogram.getValueFromBinIndex(binIndex) - min) / range) * LUT_MAX;
+  return Math.max(0, Math.min(LUT_MAX, lut));
+}
+
+export function lutToHistogramValue(histogram: HistogramDataRange, lut: number): number {
+  const min = histogram.getDataMin();
+  return min + (lut / LUT_MAX) * (histogram.getDataMax() - min);
+}
+
+export function lutToHistogramBin(histogram: HistogramDataRange, lut: number): number {
+  return histogram.findFractionalBinOfValue(lutToHistogramValue(histogram, lut));
+}
+
+const HISTOGRAM_LABEL_MAX_DECIMALS = 3;
+
+export function formatHistogramValue(value: number, step: number, rangeMaxAbs: number): string {
+  if (!Number.isFinite(value) || !Number.isFinite(step) || step <= 0) {
+    return `${value}`;
+  }
+  if (Math.abs(value) < step / 2) {
+    return "0";
+  }
+
+  const stepExponent = Math.round(Math.log10(step));
+
+  if (-stepExponent <= HISTOGRAM_LABEL_MAX_DECIMALS && rangeMaxAbs < 1e6) {
+    const decimals = Math.max(0, -stepExponent);
+    return `${Number(value.toFixed(decimals))}`;
+  }
+
+  const valueExponent = Math.floor(Math.log10(Math.abs(value)));
+  const decimals = Math.min(15, Math.max(0, valueExponent - stepExponent));
+  const [significand, exponent] = value.toExponential(decimals).split("e");
+  return `${Number(significand)}e${exponent.replace("+", "")}`;
 }

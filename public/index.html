@@ -82,6 +82,7 @@
               aria-haspopup="listbox"
               aria-expanded="false">
               <span id="ome-zarr-scale-select-text">Auto</span>
+              <span class="select__spinner" aria-hidden="true"></span>
               <span class="select__chevron" aria-hidden="true">
                 <svg viewBox="0 0 16 16" width="12" height="12">
                   <path d="M4 6 l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -245,7 +246,13 @@
                 <div class="range__thumb" id="colormap-range-max" data-handle="max" aria-label="Colormap range maximum"></div>
               </div>
               <div class="range__meta">
-                <span>Colormap range</span>
+                <span class="range__title">
+                  Colormap range
+                  <label class="range__lock" title="Lock the colormap range to the transparency range">
+                    <input id="colormap-range-map-toggle" type="checkbox" />
+                    Lock
+                  </label>
+                </span>
                 <span class="mono" id="colormap-range-values">0 – 255</span>
               </div>
             </div>
