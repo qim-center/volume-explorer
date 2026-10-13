@@ -1115,4 +1115,10 @@ export default class VolumeDrawable {
   get showBoundingBox(): boolean {
     return this.settings.showBoundingBox;
   }
+
+  /** Physical length between the grid's tick marks, follows the visible (cropped) region */
+  get tickMarkPhysicalLength(): number {
+    const { bmin, bmax } = this.settings.bounds;
+    return this.volume.getRegionTickMarkPhysicalLength(bmin, bmax);
+  }
 }

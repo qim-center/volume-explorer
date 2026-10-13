@@ -22,6 +22,10 @@ interface VolumeDataObserver {
  * @class
  * @param {ImageInfo} imageInfo
  */
+
+// pick a power of 10 that is a divisor of extend in the 2-20 range
+const tickMarkLengthForExtent = (extent: number): number => 10 ** Math.floor(Math.log10(extent / 2));
+
 export default class Volume {
   public imageInfo: CImageInfo;
   public loadSpec: Required<LoadSpec>;
@@ -254,7 +258,13 @@ export default class Volume {
     this.normPhysicalSize = this.physicalSize.clone().divideScalar(this.physicalScale);
     // While we're here, pick a power of 10 that divides into our max dimension a reasonable number of times
     // and save it to be the length of tick marks in 3d.
-    this.tickMarkPhysicalLength = 10 ** Math.floor(Math.log10(this.physicalScale / 2));
+    this.tickMarkPhysicalLength = tickMarkLengthForExtent(this.physicalScale);
+  }
+
+  getRegionTickMarkPhysicalLength(bmin: Vector3, bmax: Vector3): number {
+    const size = bmax.clone().sub(bmin).multiply(this.physicalSize);
+    const maxSize = Math.max(size.x, size.y, size.z);
+    return maxSize > 0 ? tickMarkLengthForExtent(maxSize) : 0;
   }
 
   setUnitSymbol(symbol: string): void {
