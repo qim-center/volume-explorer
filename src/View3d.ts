@@ -131,7 +131,14 @@ export class View3d {
   }
 
   private updatePerspectiveScaleBar(volume: Volume): void {
-    this.canvas3d.updatePerspectiveScaleBar(volume.tickMarkPhysicalLength, volume.imageInfo.spatialUnit);
+    const length = this.image?.tickMarkPhysicalLength ?? volume.tickMarkPhysicalLength;
+    this.canvas3d.updatePerspectiveScaleBar(length, volume.imageInfo.spatialUnit);
+  }
+
+  private onVisibleRegionChanged(): void {
+    if (this.image) {
+      this.updatePerspectiveScaleBar(this.image.volume);
+    }
   }
 
   private recenterControlsTarget(center: Vector3): void {
@@ -832,6 +839,7 @@ export class View3d {
     recenter = true
   ): void {
     this.image?.updateVisibleRegion(xmin, xmax, ymin, ymax, zmin, zmax);
+    this.onVisibleRegionChanged();
     if (this.image && recenter) {
       const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
       this.recenterControlsTarget(center);
@@ -849,6 +857,7 @@ export class View3d {
     zmax: number
   ): Promise<void> {
     const loadPromise = this.image?.updateLoadedRegion(xmin, xmax, ymin, ymax, zmin, zmax);
+    this.onVisibleRegionChanged();
     if (this.image) {
       const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
       this.recenterControlsTarget(center);
@@ -868,6 +877,7 @@ export class View3d {
    */
   setAxisVisibleRegion(volume: Volume, axis: "x" | "y" | "z", minval: number, maxval: number, isOrthoAxis: boolean): void {
     this.image?.setAxisVisibleRegion(axis as Axis, minval, maxval, isOrthoAxis);
+    this.onVisibleRegionChanged();
     this.redraw();
   }
 

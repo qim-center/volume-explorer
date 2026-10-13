@@ -71,8 +71,10 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     this.boxHelper.updateMatrixWorld();
     this.boxHelper.visible = false;
 
-    this.tickMarksMesh = this.createTickMarks();
-    this.tickMarksMesh.updateMatrixWorld();
+    this.tickMarksMesh = new LineSegments(
+      new BufferGeometry(),
+      new LineBasicMaterial({ color: BOUNDING_BOX_DEFAULT_COLOR })
+    );
     this.tickMarksMesh.visible = false;
 
     this.geometryTransformNode = new Group();
@@ -96,8 +98,6 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     const fullRegionScale = normPhysicalSize.clone().multiply(this.settings.scale);
     this.geometryMesh.scale.copy(fullRegionScale).multiply(normRegionSize);
     this.setUniform("volumeScale", normPhysicalSize);
-    this.boxHelper.box.set(fullRegionScale.clone().multiplyScalar(-0.5), fullRegionScale.clone().multiplyScalar(0.5));
-    this.tickMarksMesh.scale.copy(fullRegionScale);
     this.settings && this.updateSettings(this.settings, SettingsFlags.ROI);
 
     // Set atlas dimension uniforms
@@ -194,6 +194,8 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
 
       this.setUniform("AABB_CLIP_MIN", bmin);
       this.setUniform("AABB_CLIP_MAX", bmax);
+
+      this.updateGrid();
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {
@@ -239,73 +241,80 @@ export default class RayMarchedAtlasVolume implements VolumeRenderImpl {
     return [geom, mesh];
   }
 
-  private createTickMarks(): LineSegments {
-    // Length of tick mark lines in world units
-    const TICK_LENGTH = 0.025;
-    const { tickMarkPhysicalLength, physicalScale, normPhysicalSize } = this.volume;
-    const numTickMarks = physicalScale / tickMarkPhysicalLength;
+  private updateGrid(): void {
+    const { bounds, scale } = this.settings;
+    const { normPhysicalSize, physicalScale } = this.volume;
+
+    const fullRegionScale = normPhysicalSize.clone().multiply(scale);
+    const min = bounds.bmin.clone().multiply(fullRegionScale);
+    const max = bounds.bmax.clone().multiply(fullRegionScale).max(min);
+    this.boxHelper.box.set(min, max);
+
+    const size = max.clone().sub(min);
+    const tickLength = 0.025 * Math.max(size.x, size.y, size.z);
+    const tickMarkPhysicalLength = this.volume.getRegionTickMarkPhysicalLength(bounds.bmin, bounds.bmax);
+    const tickSpacing = scale.clone().multiplyScalar(tickMarkPhysicalLength / physicalScale);
+    const numTicks = size.clone().divide(tickSpacing).floor();
 
     const vertices: number[] = [];
 
-    const tickEndY = TICK_LENGTH / normPhysicalSize.y + 0.5;
-    const tickSpacingX = 1 / (normPhysicalSize.x * numTickMarks);
-    for (let x = -0.5; x <= 0.5; x += tickSpacingX) {
+    for (let i = 0; i <= numTicks.x; i++) {
+      const x = min.x + i * tickSpacing.x;
       // prettier-ignore
       vertices.push(
-        x, 0.5,       0.5,
-        x, tickEndY,  0.5,
+        x, max.y,              max.z,
+        x, max.y + tickLength, max.z,
 
-        x, -0.5,      -0.5,
-        x, -tickEndY, -0.5,
+        x, min.y,              min.z,
+        x, min.y - tickLength, min.z,
 
-        x, 0.5,       -0.5,
-        x, tickEndY,  -0.5,
+        x, max.y,              min.z,
+        x, max.y + tickLength, min.z,
 
-        x, -0.5,      0.5,
-        x, -tickEndY, 0.5,
+        x, min.y,              max.z,
+        x, min.y - tickLength, max.z,
       );
     }
 
-    const tickEndX = TICK_LENGTH / normPhysicalSize.x + 0.5;
-    const tickSpacingY = 1 / (normPhysicalSize.y * numTickMarks);
-    for (let y = 0.5; y >= -0.5; y -= tickSpacingY) {
+    for (let i = 0; i <= numTicks.y; i++) {
+      const y = max.y - i * tickSpacing.y;
       // prettier-ignore
       vertices.push(
-        -0.5,      y, 0.5,
-        -tickEndX, y, 0.5,
+        min.x,              y, max.z,
+        min.x - tickLength, y, max.z,
 
-        -0.5,      y, -0.5,
-        -tickEndX, y, -0.5,
+        min.x,              y, min.z,
+        min.x - tickLength, y, min.z,
 
-        0.5,       y, -0.5,
-        tickEndX,  y, -0.5,
+        max.x,              y, min.z,
+        max.x + tickLength, y, min.z,
 
-        0.5,       y, 0.5,
-        tickEndX,  y, 0.5,
+        max.x,              y, max.z,
+        max.x + tickLength, y, max.z,
       );
     }
 
-    const tickSpacingZ = 1 / (normPhysicalSize.z * numTickMarks);
-    for (let z = 0.5; z >= -0.5; z -= tickSpacingZ) {
+    for (let i = 0; i <= numTicks.z; i++) {
+      const z = max.z - i * tickSpacing.z;
       // prettier-ignore
       vertices.push(
-        -0.5,      0.5,  z,
-        -tickEndX, 0.5,  z,
+        min.x,              max.y, z,
+        min.x - tickLength, max.y, z,
 
-        -0.5,      -0.5, z,
-        -tickEndX, -0.5, z,
+        min.x,              min.y, z,
+        min.x - tickLength, min.y, z,
 
-        0.5,       -0.5, z,
-        tickEndX,  -0.5, z,
+        max.x,              min.y, z,
+        max.x + tickLength, min.y, z,
 
-        0.5,       0.5,  z,
-        tickEndX,  0.5,  z,
+        max.x,              max.y, z,
+        max.x + tickLength, max.y, z,
       );
     }
 
-    const geometry = new BufferGeometry();
-    geometry.setAttribute("position", new BufferAttribute(new Float32Array(vertices), 3));
-    return new LineSegments(geometry, new LineBasicMaterial({ color: BOUNDING_BOX_DEFAULT_COLOR }));
+    this.tickMarksMesh.geometry.dispose();
+    this.tickMarksMesh.geometry = new BufferGeometry();
+    this.tickMarksMesh.geometry.setAttribute("position", new BufferAttribute(new Float32Array(vertices), 3));
   }
 
   public cleanup(): void {
