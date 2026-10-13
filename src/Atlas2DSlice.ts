@@ -1,10 +1,6 @@
 import {
-  Box3,
-  Box3Helper,
   BufferGeometry,
-  Color,
   Group,
-  LineBasicMaterial,
   Material,
   Matrix4,
   Mesh,
@@ -14,7 +10,6 @@ import {
   PlaneGeometry,
   ShaderMaterial,
   Vector2,
-  Vector3,
   WebGLRenderer,
 } from "three";
 import { Channel, Volume } from ".";
@@ -22,9 +17,8 @@ import { sliceFragmentShaderSrc, sliceShaderUniforms, sliceVertexShaderSrc } fro
 import type { VolumeRenderImpl } from "./VolumeRenderImpl.js";
 import { SettingsFlags, VolumeRenderSettings } from "./VolumeRenderSettings.js";
 import FusedChannelData from "./FusedChannelData.js";
+import GridLines from "./GridLines.js";
 import type { FuseChannel } from "./types.js";
-
-const BOUNDING_BOX_DEFAULT_COLOR = new Color(0xffff00);
 
 /**
  * Creates a plane that renders a 2D XY slice of volume atlas data.
@@ -35,7 +29,7 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
   private geometry: PlaneGeometry;
   protected geometryMesh: Mesh<BufferGeometry, Material>;
   private geometryTransformNode: Group;
-  private boxHelper: Box3Helper;
+  private gridLines: GridLines;
   private uniforms: ReturnType<typeof sliceShaderUniforms>;
   private channelData!: FusedChannelData;
   private sliceUpdateWaiting = false;
@@ -52,17 +46,12 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
     this.setUniform("sliceAxis", 2);
     [this.geometry, this.geometryMesh] = this.createGeometry(this.uniforms);
 
-    this.boxHelper = new Box3Helper(
-      new Box3(new Vector3(-0.5, -0.5, -0.5), new Vector3(0.5, 0.5, 0.5)),
-      BOUNDING_BOX_DEFAULT_COLOR
-    );
-    this.boxHelper.updateMatrixWorld();
-    this.boxHelper.visible = false;
+    this.gridLines = new GridLines();
 
     this.geometryTransformNode = new Group();
     this.geometryTransformNode.name = "VolumeContainerNode";
 
-    this.geometryTransformNode.add(this.boxHelper, this.geometryMesh);
+    this.geometryTransformNode.add(this.gridLines, this.geometryMesh);
 
     this.setUniform("Z_SLICE", Math.floor(volume.imageInfo.volumeSize.z / 2));
     this.settings = settings;
@@ -106,7 +95,7 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
     // set scale
     this.geometryMesh.scale.copy(regionScale);
     this.setUniform("volumeScale", regionScale);
-    this.boxHelper.box.set(volumeScale.clone().multiplyScalar(-0.5), volumeScale.clone().multiplyScalar(0.5));
+    this.updateGridLines();
 
     const { atlasTileDims, subregionSize } = this.volume.imageInfo;
     const atlasSize = new Vector2(subregionSize.x, subregionSize.y).multiply(atlasTileDims);
@@ -126,6 +115,10 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
     }
 
     this.applyNearestFiltering();
+  }
+
+  private updateGridLines(): void {
+    this.gridLines.update(this.volume, this.settings, this.geometryMesh.position.z);
   }
 
   private applyNearestFiltering(): void {
@@ -170,12 +163,8 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
       }
     }
 
-    if (dirtyFlags & SettingsFlags.BOUNDING_BOX) {
-      // Configure bounding box
-      this.boxHelper.visible = this.settings.showBoundingBox;
-      const colorVector = this.settings.boundingBoxColor;
-      const newBoxColor = new Color(colorVector[0], colorVector[1], colorVector[2]);
-      (this.boxHelper.material as LineBasicMaterial).color = newBoxColor;
+    if (dirtyFlags & (SettingsFlags.VIEW | SettingsFlags.BOUNDING_BOX | SettingsFlags.ROI)) {
+      this.updateGridLines();
     }
 
     if (dirtyFlags & SettingsFlags.TRANSFORM) {
@@ -254,6 +243,7 @@ export default class Atlas2DSlice implements VolumeRenderImpl {
 
   public cleanup(): void {
     this.geometry.dispose();
+    this.gridLines.cleanup();
     this.geometryMesh.material.dispose();
 
     this.channelData.cleanup();

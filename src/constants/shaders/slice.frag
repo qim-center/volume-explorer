@@ -78,7 +78,7 @@ void main() {
   // Normalize UV for [-0.5, 0.5] range
   vec2 normUv = vUv - vec2(0.5);
 
-  // Return background color if outside of clipping box
+  // Draw nothing outside of clipping box
   bool outside = false;
   if (sliceAxis == 0) {
     outside = normUv.x < boxMin.y || normUv.x > boxMax.y || normUv.y < boxMin.z || normUv.y > boxMax.z;
@@ -89,8 +89,7 @@ void main() {
   }
 
   if(outside) {
-    gl_FragColor = vec4(0.0);
-    return;
+    discard;
   }
 
   vec4 pos;
