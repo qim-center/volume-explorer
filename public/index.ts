@@ -996,10 +996,10 @@ function main() {
       return;
     }
 
-    const type = inferVolumeFileFormat(source);
+    const type = await inferVolumeFileFormat(source);
     if (!type) {
       setSourceError(
-        "Invalid URL type. Supported types: .zarr, .ome.zarr, .tif, .tiff, .ome.tif, .ome.tiff"
+        "Invalid URL type. Supported types: .zarr, .ome.zarr, .tif, .tiff, .ome.tif, .ome.tiff, or a URL with Zarr metadata"
       );
       clearView();
       return;
@@ -1017,6 +1017,18 @@ function main() {
       setVolumeLoading(false);
     }
   };
+
+  let selectOnMouseUp = false;
+  sourceUrlInput?.addEventListener("focus", () => {
+    sourceUrlInput.select();
+    selectOnMouseUp = true;
+  });
+  sourceUrlInput?.addEventListener("mouseup", (event) => {
+    if (selectOnMouseUp) {
+      event.preventDefault();
+      selectOnMouseUp = false;
+    }
+  });
 
   sourceUrlInput?.addEventListener("input", () => {
     bindSource(sourceUrlInput.value);

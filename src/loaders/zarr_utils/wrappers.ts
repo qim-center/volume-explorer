@@ -21,7 +21,7 @@ export default function wrapArray<
   const keyBase = path + array.path + (array.path.endsWith("/") ? "" : "/");
 
   const getChunk = async (coords: number[], opts?: Parameters<AsyncReadableExt<Opts>["get"]>[1]): Promise<Chunk<T>> => {
-    if (opts?.subscriber && opts.reportChunk) {
+    if (opts?.subscriber !== undefined && opts.reportChunk) {
       opts.reportChunk(coords, opts.subscriber);
     }
 
@@ -32,7 +32,7 @@ export default function wrapArray<
     }
 
     let result: Chunk<T>;
-    if (queue && opts?.subscriber) {
+    if (queue && opts?.subscriber !== undefined) {
       result = await queue.addRequest(fullKey, opts?.subscriber, () => array.getChunk(coords, opts), opts.isPrefetch);
     } else {
       result = await array.getChunk(coords, opts);

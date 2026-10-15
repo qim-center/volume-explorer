@@ -556,7 +556,13 @@ class OMEZarrLoader extends ThreadableVolumeLoader {
       const min = new Vector3(...updatedImageInfo.subregionOffset);
       const max = min.clone().add(new Vector3(...updatedImageInfo.subregionSize));
       const { sourceIndex: sourceIdx, channelIndexInSource: sourceCh } = this.matchChannelToSource(ch);
-      const unorderedSpec = [loadSpec.time, sourceCh, slice(min.z, max.z), slice(min.y, max.y), slice(min.x, max.x)];
+      const unorderedSpec = [
+        slice(loadSpec.time, loadSpec.time + 1),
+        slice(sourceCh, sourceCh + 1),
+        slice(min.z, max.z),
+        slice(min.y, max.y),
+        slice(min.x, max.x),
+      ];
 
       const level = this.sources[sourceIdx].scaleLevels[multiscaleLevel];
       const sliceSpec = this.orderByDimension(unorderedSpec as TCZYX<number | zarr.Slice>, sourceIdx);
