@@ -771,6 +771,15 @@ export default class VolumeDrawable {
     this.pickRendering?.updateSettings(this.settings, SettingsFlags.BOUNDING_BOX);
   }
 
+  setGridPhysicalSpacing(spacing: number): void {
+    if (this.settings.gridPhysicalSpacing === spacing) {
+      return;
+    }
+    this.settings.gridPhysicalSpacing = spacing;
+    this.volumeRendering.updateSettings(this.settings, SettingsFlags.BOUNDING_BOX);
+    this.pickRendering?.updateSettings(this.settings, SettingsFlags.BOUNDING_BOX);
+  }
+
   setBoundingBoxColor(color: [number, number, number]): void {
     this.settings.boundingBoxColor = color;
     this.volumeRendering.updateSettings(this.settings, SettingsFlags.BOUNDING_BOX);
@@ -1114,5 +1123,11 @@ export default class VolumeDrawable {
 
   get showBoundingBox(): boolean {
     return this.settings.showBoundingBox;
+  }
+
+  /** Physical length between the grid's tick marks, follows the visible (cropped) region */
+  get tickMarkPhysicalLength(): number {
+    const { bmin, bmax } = this.settings.bounds;
+    return this.volume.getRegionTickMarkPhysicalLength(bmin, bmax);
   }
 }

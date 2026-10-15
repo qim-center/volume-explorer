@@ -127,11 +127,19 @@ export class View3d {
   }
 
   private updateOrthoScaleBar(volume: Volume): void {
-    this.canvas3d.updateOrthoScaleBar(volume.physicalScale, volume.imageInfo.spatialUnit);
+    const length = this.canvas3d.updateOrthoScaleBar(volume.physicalScale, volume.imageInfo.spatialUnit);
+    this.image?.setGridPhysicalSpacing(length);
   }
 
   private updatePerspectiveScaleBar(volume: Volume): void {
-    this.canvas3d.updatePerspectiveScaleBar(volume.tickMarkPhysicalLength, volume.imageInfo.spatialUnit);
+    const length = this.image?.tickMarkPhysicalLength ?? volume.tickMarkPhysicalLength;
+    this.canvas3d.updatePerspectiveScaleBar(length, volume.imageInfo.spatialUnit);
+  }
+
+  private onVisibleRegionChanged(): void {
+    if (this.image) {
+      this.updatePerspectiveScaleBar(this.image.volume);
+    }
   }
 
   private recenterControlsTarget(center: Vector3): void {
@@ -381,6 +389,7 @@ export class View3d {
 
   setShowBoundingBox(volume: Volume, showBoundingBox: boolean): void {
     this.image?.setShowBoundingBox(showBoundingBox);
+    this.canvas3d.setShowGrid(showBoundingBox);
     this.canvas3d.setShowPerspectiveScaleBar(
       showBoundingBox && this.canvas3d.showOrthoScaleBar && this.volumeRenderMode !== RenderMode.PATHTRACE
     );
@@ -432,6 +441,7 @@ export class View3d {
     this.image.setResolution(this.canvas3d.getWidth(), this.canvas3d.getHeight());
     this.image.setIsOrtho(isOrthographicCamera(this.canvas3d.camera));
     this.image.setBrightness(this.exposure);
+    this.canvas3d.setShowGrid(this.image.showBoundingBox);
 
     this.canvas3d.setControlHandlers(
       this.onStartControls.bind(this),
@@ -832,6 +842,7 @@ export class View3d {
     recenter = true
   ): void {
     this.image?.updateVisibleRegion(xmin, xmax, ymin, ymax, zmin, zmax);
+    this.onVisibleRegionChanged();
     if (this.image && recenter) {
       const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
       this.recenterControlsTarget(center);
@@ -849,6 +860,7 @@ export class View3d {
     zmax: number
   ): Promise<void> {
     const loadPromise = this.image?.updateLoadedRegion(xmin, xmax, ymin, ymax, zmin, zmax);
+    this.onVisibleRegionChanged();
     if (this.image) {
       const center = this.image.getVisibleRegionWorldCenter(xmin, xmax, ymin, ymax, zmin, zmax);
       this.recenterControlsTarget(center);
@@ -868,6 +880,7 @@ export class View3d {
    */
   setAxisVisibleRegion(volume: Volume, axis: "x" | "y" | "z", minval: number, maxval: number, isOrthoAxis: boolean): void {
     this.image?.setAxisVisibleRegion(axis as Axis, minval, maxval, isOrthoAxis);
+    this.onVisibleRegionChanged();
     this.redraw();
   }
 

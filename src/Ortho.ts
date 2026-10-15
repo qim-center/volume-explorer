@@ -1,10 +1,6 @@
 import {
-  Box3,
-  Box3Helper,
   BufferGeometry,
-  Color,
   Group,
-  LineBasicMaterial,
   Material,
   Matrix4,
   Mesh,
@@ -24,10 +20,9 @@ import { sliceFragmentShaderSrc, sliceShaderUniforms, sliceVertexShaderSrc } fro
 import type { VolumeRenderImpl } from "./VolumeRenderImpl.js";
 import { Axis, SettingsFlags, VolumeRenderSettings } from "./VolumeRenderSettings.js";
 import FusedChannelData from "./FusedChannelData.js";
+import GridLines from "./GridLines.js";
 import type { FuseChannel } from "./types.js";
 import Channel from "./Channel.js";
-
-const BOUNDING_BOX_DEFAULT_COLOR = new Color(0xffff00);
 
 type SlicePlane = {
   axis: Axis;
@@ -51,7 +46,7 @@ export default class Ortho implements VolumeRenderImpl {
   public volume: Volume;
   private geometry: PlaneGeometry;
   private geometryTransformNode: Group;
-  private boxHelper: Box3Helper;
+  private gridLines: GridLines;
   private planes: SlicePlane[];
   private channelData!: FusedChannelData;
 
@@ -62,16 +57,11 @@ export default class Ortho implements VolumeRenderImpl {
     this.geometryTransformNode = new Group();
     this.geometryTransformNode.name = "VolumeContainerNode";
 
-    this.boxHelper = new Box3Helper(
-      new Box3(new Vector3(-0.5, -0.5, -0.5), new Vector3(0.5, 0.5, 0.5)),
-      BOUNDING_BOX_DEFAULT_COLOR
-    );
-    this.boxHelper.updateMatrixWorld();
-    this.boxHelper.visible = false;
+    this.gridLines = new GridLines();
 
     this.planes = [Axis.X, Axis.Y, Axis.Z].map((axis) => this.createPlane(axis));
 
-    this.geometryTransformNode.add(this.boxHelper, ...this.planes.map((plane) => plane.mesh));
+    this.geometryTransformNode.add(this.gridLines, ...this.planes.map((plane) => plane.mesh));
 
     this.settings = settings;
     this.updateVolumeDimensions();
@@ -136,6 +126,22 @@ export default class Ortho implements VolumeRenderImpl {
     return clampedIndex / maxIndex;
   }
 
+  private updateGridLines(): void {
+    const viewedPlane = this.planes.find((plane) => plane.axis === this.settings.viewAxis);
+    const axisIndex = AXIS_INDEX[this.settings.viewAxis];
+    this.gridLines.update(this.volume, this.settings, viewedPlane?.mesh.position.getComponent(axisIndex));
+  }
+
+    private updatePlaneVisibility(): void {
+    const { bmin, bmax } = this.settings.bounds;
+    for (const plane of this.planes) {
+      const slicePosition = this.getSliceCoord(plane.axis) - 0.5;
+      const isViewedPlane = plane.axis === this.settings.viewAxis;
+      const isCroppedOut = !isViewedPlane && (slicePosition < bmin[plane.axis] || slicePosition > bmax[plane.axis]);
+      plane.mesh.visible = this.settings.visible && !isCroppedOut;
+    }
+  }
+
   private updatePlaneTransforms(regionScale: Vector3, volumeOffset: Vector3): void {
     for (const plane of this.planes) {
       const sliceCoord = this.getSliceCoord(plane.axis);
@@ -169,7 +175,7 @@ export default class Ortho implements VolumeRenderImpl {
 
     this.setUniformForAll("volumeScale", regionScale);
 
-    this.boxHelper.box.set(volumeScale.clone().multiplyScalar(-0.5), volumeScale.clone().multiplyScalar(0.5));
+    this.updateGridLines();
 
     const { atlasTileDims, subregionSize } = this.volume.imageInfo;
     const atlasSize = new Vector2(subregionSize.x, subregionSize.y).multiply(atlasTileDims);
@@ -211,20 +217,14 @@ export default class Ortho implements VolumeRenderImpl {
 
     this.settings = newSettings;
 
+    if (dirtyFlags & (SettingsFlags.VIEW | SettingsFlags.ROI)) {
+      this.updatePlaneVisibility();
+    }
+
     if (dirtyFlags & SettingsFlags.VIEW) {
-      for (const plane of this.planes) {
-        plane.mesh.visible = this.settings.visible;
-      }
       this.setUniformForAll("orthoScale", this.settings.orthoScale);
       this.setUniformForAll("isOrtho", this.settings.isOrtho ? 1.0 : 0.0);
       this.setUniformForAll("orthoThickness", 1.0);
-    }
-
-    if (dirtyFlags & SettingsFlags.BOUNDING_BOX) {
-      this.boxHelper.visible = this.settings.showBoundingBox;
-      const colorVector = this.settings.boundingBoxColor;
-      const newBoxColor = new Color(colorVector[0], colorVector[1], colorVector[2]);
-      (this.boxHelper.material as LineBasicMaterial).color = newBoxColor;
     }
 
     if (dirtyFlags & SettingsFlags.TRANSFORM) {
@@ -258,6 +258,10 @@ export default class Ortho implements VolumeRenderImpl {
       const regionScale = volumeScale.clone().multiply(this.volume.normRegionSize);
       const volumeOffset = this.volume.getContentCenter().clone().multiply(this.settings.scale);
       this.updatePlaneTransforms(regionScale, volumeOffset);
+    }
+
+    if (dirtyFlags & (SettingsFlags.VIEW | SettingsFlags.BOUNDING_BOX | SettingsFlags.ROI)) {
+      this.updateGridLines();
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {
@@ -313,6 +317,7 @@ export default class Ortho implements VolumeRenderImpl {
 
   public cleanup(): void {
     this.geometry.dispose();
+    this.gridLines.cleanup();
     for (const plane of this.planes) {
       plane.mesh.material.dispose();
     }

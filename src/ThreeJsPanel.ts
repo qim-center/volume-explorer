@@ -101,6 +101,7 @@ export class ThreeJsPanel {
   private scaleBarContainerElement: HTMLDivElement;
   private orthoScaleBarElement: HTMLDivElement;
   public showOrthoScaleBar: boolean;
+  public showGrid: boolean;
   private perspectiveScaleBarElement: HTMLDivElement;
   public showPerspectiveScaleBar: boolean;
   private timestepIndicatorElement: HTMLDivElement;
@@ -139,6 +140,7 @@ export class ThreeJsPanel {
     this.scaleBarContainerElement = document.createElement("div");
     this.orthoScaleBarElement = document.createElement("div");
     this.showOrthoScaleBar = true;
+    this.showGrid = false;
     this.perspectiveScaleBarElement = document.createElement("div");
     this.showPerspectiveScaleBar = false;
     this.timestepIndicatorElement = document.createElement("div");
@@ -409,8 +411,13 @@ export class ThreeJsPanel {
 
     // Orthographic scale bar
     const orthoScaleBarStyle: Partial<CSSStyleDeclaration> = {
-      border: "1px solid",
+      border: "2px solid",
       borderTop: "none",
+      // dark text in a light bubble, so it stays readable both with light and dark backgrounds and volumes
+      color: "black",
+      backgroundColor: "rgba(255, 255, 255, 0.85)",
+      boxShadow: "0 0 0 8px rgba(255, 255, 255, 0.85)",
+      borderRadius: "2px",
       height: "10px",
       display: "none",
       fontSize: "14px",
@@ -455,7 +462,7 @@ export class ThreeJsPanel {
     this.containerdiv.appendChild(this.timestepIndicatorElement);
   }
 
-  updateOrthoScaleBar(scale: number, unit?: string): void {
+  updateOrthoScaleBar(scale: number, unit?: string): number {
     // We want to find the largest round number of physical units that keeps the scale bar within this width on screen
     const SCALE_BAR_MAX_WIDTH = 150;
     // Convert max width to volume physical units
@@ -467,6 +474,7 @@ export class ThreeJsPanel {
     const scaleStr = formatNumber(scaleValue);
     this.orthoScaleBarElement.innerHTML = `${scaleStr}${unit || ""}`;
     this.orthoScaleBarElement.style.width = `${SCALE_BAR_MAX_WIDTH * (scaleValue / physicalMaxWidth)}px`;
+    return scaleValue;
   }
 
   updatePerspectiveScaleBar(length: number, unit?: string): void {
@@ -486,7 +494,7 @@ export class ThreeJsPanel {
 
   updateScaleBarVisibility(): void {
     const isOrtho = isOrthographicCamera(this.camera);
-    const orthoVisible = isOrtho && this.showOrthoScaleBar;
+    const orthoVisible = isOrtho && this.showOrthoScaleBar && this.showGrid;
     const perspectiveVisible = !isOrtho && this.showPerspectiveScaleBar;
     this.orthoScaleBarElement.style.display = orthoVisible ? "" : "none";
     this.perspectiveScaleBarElement.style.display = perspectiveVisible ? "" : "none";
@@ -494,6 +502,11 @@ export class ThreeJsPanel {
 
   setShowOrthoScaleBar(visible: boolean): void {
     this.showOrthoScaleBar = visible;
+    this.updateScaleBarVisibility();
+  }
+
+  setShowGrid(visible: boolean): void {
+    this.showGrid = visible;
     this.updateScaleBarVisibility();
   }
 
