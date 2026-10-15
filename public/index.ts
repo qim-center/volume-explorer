@@ -996,10 +996,10 @@ function main() {
       return;
     }
 
-    const type = inferVolumeFileFormat(source);
+    const type = await inferVolumeFileFormat(source);
     if (!type) {
       setSourceError(
-        "Invalid URL type. Supported types: .zarr, .ome.zarr, .tif, .tiff, .ome.tif, .ome.tiff, or a URL with a zarr.json"
+        "Invalid URL type. Supported types: .zarr, .ome.zarr, .tif, .tiff, .ome.tif, .ome.tiff, or a URL with Zarr metadata"
       );
       clearView();
       return;
