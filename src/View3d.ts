@@ -389,6 +389,7 @@ export class View3d {
 
   setShowBoundingBox(volume: Volume, showBoundingBox: boolean): void {
     this.image?.setShowBoundingBox(showBoundingBox);
+    this.canvas3d.setShowGrid(showBoundingBox);
     this.canvas3d.setShowPerspectiveScaleBar(
       showBoundingBox && this.canvas3d.showOrthoScaleBar && this.volumeRenderMode !== RenderMode.PATHTRACE
     );
@@ -440,6 +441,7 @@ export class View3d {
     this.image.setResolution(this.canvas3d.getWidth(), this.canvas3d.getHeight());
     this.image.setIsOrtho(isOrthographicCamera(this.canvas3d.camera));
     this.image.setBrightness(this.exposure);
+    this.canvas3d.setShowGrid(this.image.showBoundingBox);
 
     this.canvas3d.setControlHandlers(
       this.onStartControls.bind(this),
