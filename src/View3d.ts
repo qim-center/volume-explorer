@@ -127,7 +127,8 @@ export class View3d {
   }
 
   private updateOrthoScaleBar(volume: Volume): void {
-    this.canvas3d.updateOrthoScaleBar(volume.physicalScale, volume.imageInfo.spatialUnit);
+    const length = this.canvas3d.updateOrthoScaleBar(volume.physicalScale, volume.imageInfo.spatialUnit);
+    this.image?.setGridPhysicalSpacing(length);
   }
 
   private updatePerspectiveScaleBar(volume: Volume): void {

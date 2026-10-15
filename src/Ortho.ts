@@ -126,11 +126,18 @@ export default class Ortho implements VolumeRenderImpl {
     return clampedIndex / maxIndex;
   }
 
-  private updatePlaneVisibility(): void {
+  private updateGridLines(): void {
+    const viewedPlane = this.planes.find((plane) => plane.axis === this.settings.viewAxis);
+    const axisIndex = AXIS_INDEX[this.settings.viewAxis];
+    this.gridLines.update(this.volume, this.settings, viewedPlane?.mesh.position.getComponent(axisIndex));
+  }
+
+    private updatePlaneVisibility(): void {
     const { bmin, bmax } = this.settings.bounds;
     for (const plane of this.planes) {
       const slicePosition = this.getSliceCoord(plane.axis) - 0.5;
-      const isCroppedOut = slicePosition < bmin[plane.axis] || slicePosition > bmax[plane.axis];
+      const isViewedPlane = plane.axis === this.settings.viewAxis;
+      const isCroppedOut = !isViewedPlane && (slicePosition < bmin[plane.axis] || slicePosition > bmax[plane.axis]);
       plane.mesh.visible = this.settings.visible && !isCroppedOut;
     }
   }
@@ -168,7 +175,7 @@ export default class Ortho implements VolumeRenderImpl {
 
     this.setUniformForAll("volumeScale", regionScale);
 
-    this.gridLines.update(this.volume, this.settings);
+    this.updateGridLines();
 
     const { atlasTileDims, subregionSize } = this.volume.imageInfo;
     const atlasSize = new Vector2(subregionSize.x, subregionSize.y).multiply(atlasTileDims);
@@ -220,10 +227,6 @@ export default class Ortho implements VolumeRenderImpl {
       this.setUniformForAll("orthoThickness", 1.0);
     }
 
-    if (dirtyFlags & (SettingsFlags.VIEW | SettingsFlags.BOUNDING_BOX | SettingsFlags.ROI)) {
-      this.gridLines.update(this.volume, this.settings);
-    }
-
     if (dirtyFlags & SettingsFlags.TRANSFORM) {
       this.geometryTransformNode.position.copy(this.settings.translation);
       this.geometryTransformNode.rotation.copy(this.settings.rotation);
@@ -255,6 +258,10 @@ export default class Ortho implements VolumeRenderImpl {
       const regionScale = volumeScale.clone().multiply(this.volume.normRegionSize);
       const volumeOffset = this.volume.getContentCenter().clone().multiply(this.settings.scale);
       this.updatePlaneTransforms(regionScale, volumeOffset);
+    }
+
+    if (dirtyFlags & (SettingsFlags.VIEW | SettingsFlags.BOUNDING_BOX | SettingsFlags.ROI)) {
+      this.updateGridLines();
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {

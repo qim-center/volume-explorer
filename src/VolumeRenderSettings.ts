@@ -11,7 +11,7 @@ export enum SettingsFlags {
   TRANSFORM = 0b000000001,
   /** parameters: gammaMin, gammaLevel, gammaMax, brightness*/
   CAMERA = 0b000000010,
-  /** parameters: showBoundingBox, boundingBoxColor */
+  /** parameters: showBoundingBox, boundingBoxColor, gridPhysicalSpacing */
   BOUNDING_BOX = 0b000000100,
   /** parameters: bounds, xSlice, ySlice, zSlice */
   ROI = 0b000001000,
@@ -81,6 +81,7 @@ export class VolumeRenderSettings {
   // BOUNDING_BOX
   public showBoundingBox: boolean;
   public boundingBoxColor: [number, number, number];
+  public gridPhysicalSpacing: number;
 
   // SAMPLING
   public resolution: Vector2;
@@ -109,6 +110,7 @@ export class VolumeRenderSettings {
     this.density = 0;
     this.brightness = 0;
     this.showBoundingBox = false;
+    this.gridPhysicalSpacing = 0;
     this.bounds = {
       bmin: new Vector3(-0.5, -0.5, -0.5),
       bmax: new Vector3(0.5, 0.5, 0.5),
