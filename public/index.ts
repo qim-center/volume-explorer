@@ -1,3 +1,8 @@
+// fonts are bundled (not loaded from a CDN) so the app works on offline/restricted networks
+import "@fontsource/geist/400.css";
+import "@fontsource/geist/500.css";
+import "@fontsource/geist/600.css";
+import "@fontsource/geist-mono/400.css";
 import { Color, Vector3 } from "three";
 import GUI from "lil-gui";
 
