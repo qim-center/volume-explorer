@@ -19,7 +19,6 @@ const AXES = [Axis.X, Axis.Y, Axis.Z] as const;
 const TICK_DIRECTION = [1, 0, 0];
 const TICKS_FROM_MAX = [false, true, true];
 
-/** The bounding box and tick marks drawn around the visible (cropped) region of a volume */
 export default class GridLines extends Group {
   private box: Box3Helper;
   private tickMarks: LineSegments<BufferGeometry, LineBasicMaterial>;
@@ -35,7 +34,7 @@ export default class GridLines extends Group {
   }
 
   public update(volume: Volume, settings: VolumeRenderSettings, viewAxisCenter?: number): void {
-    const { bounds, scale, viewAxis, showBoundingBox, boundingBoxColor } = settings;
+    const { bounds, scale, viewAxis, isOrtho, showBoundingBox, boundingBoxColor, gridPhysicalSpacing } = settings;
 
     this.visible = showBoundingBox;
     (this.box.material as LineBasicMaterial).color.setRGB(...boundingBoxColor);
@@ -56,7 +55,11 @@ export default class GridLines extends Group {
     const tickLength = TICK_LENGTH * Math.max(size.x, size.y, size.z);
     const tickMarkPhysicalLength = volume.getRegionTickMarkPhysicalLength(bounds.bmin, bounds.bmax);
     const tickSpacing = scale.clone().multiplyScalar(tickMarkPhysicalLength / volume.physicalScale);
-    const numTicks = size.clone().divide(tickSpacing).floor();
+    const gridSpacing = scale.clone().multiplyScalar(gridPhysicalSpacing / volume.physicalScale);
+    const numGridLines = size.clone().divide(gridSpacing).floor();
+    const drawSquares = isOrtho && viewAxisIndex >= 0 && gridPhysicalSpacing > 0 && Math.max(...numGridLines.toArray());
+    const lineSpacing = drawSquares ? gridSpacing : tickSpacing;
+    const numLines = size.clone().divide(lineSpacing).floor();
 
     const vertices: number[] = [];
     for (let axis = 0; axis < 3; axis++) {
@@ -66,10 +69,21 @@ export default class GridLines extends Group {
       const tickAxis = TICK_DIRECTION[axis] === viewAxisIndex ? 3 - axis - viewAxisIndex : TICK_DIRECTION[axis];
       const otherAxis = 3 - axis - tickAxis;
 
-      for (let i = 0; i <= numTicks.getComponent(axis); i++) {
-        const offset = i * tickSpacing.getComponent(axis);
+      for (let i = 0; i <= numLines.getComponent(axis); i++) {
+        const offset = i * lineSpacing.getComponent(axis);
         const vertex = [0, 0, 0];
         vertex[axis] = TICKS_FROM_MAX[axis] ? max.getComponent(axis) - offset : min.getComponent(axis) + offset;
+
+        if (drawSquares) {
+          for (const depthEnd of [min, max]) {
+            vertex[viewAxisIndex] = depthEnd.getComponent(viewAxisIndex);
+            vertex[tickAxis] = min.getComponent(tickAxis);
+            vertices.push(...vertex);
+            vertex[tickAxis] = max.getComponent(tickAxis);
+            vertices.push(...vertex);
+          }
+          continue;
+        }
 
         for (const tickEnd of [min, max]) {
           for (const otherEnd of [min, max]) {

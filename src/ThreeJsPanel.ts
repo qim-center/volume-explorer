@@ -455,7 +455,7 @@ export class ThreeJsPanel {
     this.containerdiv.appendChild(this.timestepIndicatorElement);
   }
 
-  updateOrthoScaleBar(scale: number, unit?: string): void {
+  updateOrthoScaleBar(scale: number, unit?: string): number {
     // We want to find the largest round number of physical units that keeps the scale bar within this width on screen
     const SCALE_BAR_MAX_WIDTH = 150;
     // Convert max width to volume physical units
@@ -467,6 +467,7 @@ export class ThreeJsPanel {
     const scaleStr = formatNumber(scaleValue);
     this.orthoScaleBarElement.innerHTML = `${scaleStr}${unit || ""}`;
     this.orthoScaleBarElement.style.width = `${SCALE_BAR_MAX_WIDTH * (scaleValue / physicalMaxWidth)}px`;
+    return scaleValue;
   }
 
   updatePerspectiveScaleBar(length: number, unit?: string): void {
