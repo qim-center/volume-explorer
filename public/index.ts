@@ -1018,6 +1018,18 @@ function main() {
     }
   };
 
+  let selectOnMouseUp = false;
+  sourceUrlInput?.addEventListener("focus", () => {
+    sourceUrlInput.select();
+    selectOnMouseUp = true;
+  });
+  sourceUrlInput?.addEventListener("mouseup", (event) => {
+    if (selectOnMouseUp) {
+      event.preventDefault();
+      selectOnMouseUp = false;
+    }
+  });
+
   sourceUrlInput?.addEventListener("input", () => {
     bindSource(sourceUrlInput.value);
     setSourceError();
