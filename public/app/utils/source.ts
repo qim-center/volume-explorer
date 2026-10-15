@@ -1,13 +1,20 @@
 import { VolumeFileFormat } from "../../../src";
 import { getFileTypeHintCandidates, remapUri } from "../../../src/utils/url_utils";
 
-async function hasZarrJson(sourceUrl: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${remapUri(sourceUrl).replace(/\/+$/, "")}/zarr.json`);
-    return response.ok && typeof (await response.json()) === "object";
-  } catch {
-    return false;
-  }
+// zarr v3 keeps group metadata in `zarr.json`, v2 in `.zattrs`
+const ZARR_METADATA_FILES = ["zarr.json", ".zattrs"];
+
+async function hasZarrMetadata(sourceUrl: string): Promise<boolean> {
+  const base = remapUri(sourceUrl).replace(/\/+$/, "");
+  const isJsonFile = async (file: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${base}/${file}`);
+      return response.ok && typeof (await response.json()) === "object";
+    } catch {
+      return false;
+    }
+  };
+  return (await Promise.all(ZARR_METADATA_FILES.map(isJsonFile))).some(Boolean);
 }
 
 export async function inferVolumeFileFormat(sourceUrl: string): Promise<VolumeFileFormat | null> {
@@ -33,5 +40,5 @@ export async function inferVolumeFileFormat(sourceUrl: string): Promise<VolumeFi
   if (candidates.some((candidate) => candidate.endsWith(".h5") || candidate.endsWith(".hdf5"))) {
     return VolumeFileFormat.H5;
   }
-  return (await hasZarrJson(sourceUrl)) ? VolumeFileFormat.ZARR : null;
+  return (await hasZarrMetadata(sourceUrl)) ? VolumeFileFormat.ZARR : null;
 }
