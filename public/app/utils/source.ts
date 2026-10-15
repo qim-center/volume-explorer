@@ -1,7 +1,16 @@
 import { VolumeFileFormat } from "../../../src";
-import { getFileTypeHintCandidates } from "../../../src/utils/url_utils";
+import { getFileTypeHintCandidates, remapUri } from "../../../src/utils/url_utils";
 
-export function inferVolumeFileFormat(sourceUrl: string): VolumeFileFormat | null {
+async function hasZarrJson(sourceUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${remapUri(sourceUrl).replace(/\/+$/, "")}/zarr.json`);
+    return response.ok && typeof (await response.json()) === "object";
+  } catch {
+    return false;
+  }
+}
+
+export async function inferVolumeFileFormat(sourceUrl: string): Promise<VolumeFileFormat | null> {
   const candidates = getFileTypeHintCandidates(sourceUrl);
   if (
     candidates.some(
@@ -24,5 +33,5 @@ export function inferVolumeFileFormat(sourceUrl: string): VolumeFileFormat | nul
   if (candidates.some((candidate) => candidate.endsWith(".h5") || candidate.endsWith(".hdf5"))) {
     return VolumeFileFormat.H5;
   }
-  return null;
+  return (await hasZarrJson(sourceUrl)) ? VolumeFileFormat.ZARR : null;
 }

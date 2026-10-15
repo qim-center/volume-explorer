@@ -999,7 +999,7 @@ function main() {
     const type = inferVolumeFileFormat(source);
     if (!type) {
       setSourceError(
-        "Invalid URL type. Supported types: .zarr, .ome.zarr, .tif, .tiff, .ome.tif, .ome.tiff"
+        "Invalid URL type. Supported types: .zarr, .ome.zarr, .tif, .tiff, .ome.tif, .ome.tiff, or a URL with a zarr.json"
       );
       clearView();
       return;
