@@ -229,6 +229,7 @@ button { font-family: inherit; cursor: pointer; }
 
 .swatch { width: 22px; height: 22px; border-radius: var(--r-control); background: var(--viewport-bg);
   border: 1px solid var(--swatch-border); padding: 0; }
+.color-input-anchor { position: fixed; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; }
 
 /* ---------- select (OME-Zarr scale) dropdown ---------- */
 .select__options { position: absolute; z-index: 7; top: calc(100% + 4px); right: 0; min-width: 180px;
