@@ -61,7 +61,15 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
     backgroundPicker.value = rgb01ToHex(state.backgroundColor);
 
     backgroundSwatch.addEventListener("click", () => {
-      backgroundPicker.click();
+      // the native popup opens below its input on chromium, so put the (invisible) input just left of the swatch
+      const rect = backgroundSwatch.getBoundingClientRect();
+      backgroundPicker.style.left = `${rect.left - 250}px`;
+      backgroundPicker.style.top = `${rect.top}px`;
+      if (backgroundPicker.showPicker) {
+        backgroundPicker.showPicker();
+      } else {
+        backgroundPicker.click();
+      }
     });
     backgroundPicker.addEventListener("change", () => {
       applyBackgroundColor(backgroundPicker.value);
