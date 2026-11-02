@@ -3,13 +3,11 @@
   <head>
     <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qim Volume Explorer</title>
-    <style id="initial-ui-visibility">.topbar,.panel,.panel-tab,.menu,.menu-scrim{display:none}</style>
     <script>
       (function () {
         const hidden = new URLSearchParams(window.location.search).get("hidden")?.trim().toLowerCase() === "true";
-        if (!hidden) {
-          const initialStyle = document.getElementById("initial-ui-visibility");
-          initialStyle?.remove();
+        if (hidden) {
+          document.documentElement.classList.add("ui-hidden");
         }
       })();
     </script>
