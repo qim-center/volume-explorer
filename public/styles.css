@@ -122,7 +122,7 @@ button { font-family: inherit; cursor: pointer; }
 .hidden { display: none !important; }
 
 /* the `hidden` attribute is overridden by author `display` rules (e.g. .colormap-picker { display: grid }) */
-.colormap-picker[hidden], .select__options[hidden], .menu[hidden], .menu-scrim[hidden], .row[hidden], .error-note[hidden], .info-note[hidden] { display: none; }
+.section[hidden], .divider[hidden], .colormap-picker[hidden], .select__options[hidden], .menu[hidden], .menu-scrim[hidden], .row[hidden], .error-note[hidden], .info-note[hidden] { display: none; }
 
 /* collapsed panel = the header strip alone, same look, chevron flipped */
 .panel-tab { position: absolute; z-index: 1; top: var(--panel-top); height: var(--panel-header-h); padding: 0 6px 0 20px;
