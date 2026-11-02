@@ -566,6 +566,7 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
 
   return {
     applyCropRegionFromState,
+    getCropAxisBounds,
     getEffectiveAxisLoadBounds,
     remapSliceIndicesForRescaledVolume,
     resetSliceIndicesForVolume,

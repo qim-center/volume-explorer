@@ -22,6 +22,7 @@ import {
 import { TestDataSpec } from "./types";
 import VolumeLoaderContext from "../src/workers/VolumeLoaderContext";
 import { DATARANGE_UINT8, ColorizeFeature } from "../src/types";
+import FileSaver from "../src/FileSaver";
 import {
   CameraMode,
   createHistogramSelection,
@@ -29,6 +30,7 @@ import {
   DEFAULT_TEST_DATA,
 } from "./app/state/stateService";
 import { createCropSliceManager } from "./app/crop/cropSliceManager";
+import { exportCroppedVolumeToTiff } from "./app/export/cropExport";
 import { getSourceLoadErrorMessage, SCALE_TOO_LARGE_MESSAGE } from "./app/errors/errorHandling";
 import {
   removeFolderByName as removeAdvancedGuiFolderByName,
@@ -140,6 +142,22 @@ function getCropRegionFromState() {
     zmin: myState.cropZmin,
     zmax: myState.cropZmax,
   };
+}
+
+// exports the enabled channels at the loaded scale level, regardless of view mode
+function exportCroppedVolume() {
+  const channelIndices = myState.channelGui.flatMap((channel, index) => (channel.enabled ? [index] : []));
+  const crop = {
+    x: cropSliceManager.getCropAxisBounds("x"),
+    y: cropSliceManager.getCropAxisBounds("y"),
+    z: cropSliceManager.getCropAxisBounds("z"),
+  };
+  try {
+    const { blob, fileName } = exportCroppedVolumeToTiff(myState.volume, channelIndices, crop);
+    FileSaver.save(blob, fileName);
+  } catch (error) {
+    setUiNote(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function syncCropHandlesFromState() {
@@ -1241,7 +1259,7 @@ function main() {
       menu: ui.exportMenu,
       scrim: ui.menuScrim,
       onView3D: () => view3D,
-      onShowNote: setUiNote,
+      onExportCroppedVolume: exportCroppedVolume,
     });
   }
 
