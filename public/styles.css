@@ -330,12 +330,12 @@ button { font-family: inherit; cursor: pointer; }
 .version-badge:hover .version-badge__version { color: var(--ink); }
 
 /* hidden UI (app launched with ?hidden=true): render only */
-body.ui-hidden .topbar,
-body.ui-hidden .panel,
-body.ui-hidden .panel-tab,
-body.ui-hidden .menu,
-body.ui-hidden .menu-scrim,
-body.ui-hidden .error-note,
-body.ui-hidden .info-note,
-body.ui-hidden .select__options,
-body.ui-hidden .version-badge { display: none; }
+.ui-hidden .topbar,
+.ui-hidden .panel,
+.ui-hidden .panel-tab,
+.ui-hidden .menu,
+.ui-hidden .menu-scrim,
+.ui-hidden .error-note,
+.ui-hidden .info-note,
+.ui-hidden .select__options,
+.ui-hidden .version-badge { display: none; }

@@ -864,14 +864,10 @@ function syncColorInputsToState() {
 function main() {
   const ui = getAppUiElements();
   const urlParams = new URLSearchParams(window.location.search);
-  const hiddenParam = urlParams.get("hidden")?.trim().toLowerCase();
   const turntableParam = urlParams.get("turntable")?.trim().toLowerCase();
   const colormapParam = urlParams.get("colormap")?.trim();
   if (colormapParam && colorizercolormaps[colormapParam]) {
     myState.colormap = colormapParam;
-  }
-  if (hiddenParam === "true") {
-    document.body.classList.add("ui-hidden");
   }
 
   const el = ui.viewerPanel;
