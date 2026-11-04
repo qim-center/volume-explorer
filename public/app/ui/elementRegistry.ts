@@ -18,8 +18,7 @@ export interface AppUiElements {
   panelRightCollapse: HTMLButtonElement | null;
   viewSegmented: HTMLElement | null;
   histogramCanvas: HTMLCanvasElement | null;
-  histogramMinTag: HTMLElement | null;
-  histogramMaxTag: HTMLElement | null;
+  histogramPointTag: HTMLElement | null;
   colormapChip: HTMLButtonElement | null;
   colormapPicker: HTMLElement | null;
   colormapInvertToggle: HTMLButtonElement | null;
@@ -60,8 +59,7 @@ export function getAppUiElements(doc: Document = document): AppUiElements {
     panelRightCollapse: byId("panel-right-collapse"),
     viewSegmented: byId("view-segmented"),
     histogramCanvas: byId("histogram-canvas"),
-    histogramMinTag: byId("histogram-min-tag"),
-    histogramMaxTag: byId("histogram-max-tag"),
+    histogramPointTag: byId("histogram-point-tag"),
     colormapChip: byId("colormap-chip"),
     colormapPicker: byId("colormap-picker"),
     colormapInvertToggle: byId("colormap-invert-toggle"),

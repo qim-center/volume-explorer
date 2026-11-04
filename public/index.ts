@@ -1163,8 +1163,7 @@ function main() {
 
   histogramController = createHistogramController({
     canvas: ui.histogramCanvas,
-    minTag: ui.histogramMinTag,
-    maxTag: ui.histogramMaxTag,
+    pointTag: ui.histogramPointTag,
     selection: histogramSelection,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
