@@ -8,6 +8,7 @@ import GUI from "lil-gui";
 
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "./colorizer";
 import {
+  Histogram,
   ImageInfo,
   IVolumeLoader,
   LoadSpec,
@@ -116,6 +117,7 @@ const loaderContext = new VolumeLoaderContext(CACHE_MAX_SIZE, MAX_ACTIVE_REQUEST
 const getNumberOfTimesteps = (): number => myState.totalFrames || myState.volume.imageInfo.times;
 
 const histogramSelection = createHistogramSelection();
+let histogramPointsSource: { volume: Volume; histogram: Histogram } | null = null;
 let histogramController: ReturnType<typeof createHistogramController> | null = null;
 let colormapController: ReturnType<typeof createColormapController> | null = null;
 const cropSliceManager = createCropSliceManager({
@@ -691,7 +693,18 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   updateChannelUI(currentVol, channelIndex)
 
   if (channelIndex === 0) {
-    histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
+    // transfer histogram opacity points across omezarr levels
+    if (histogramPointsSource?.volume === v) {
+      const previous = histogramPointsSource.histogram;
+      for (const point of histogramSelection.points) {
+        const bin = hist.findFractionalBinOfValue(previous.getValueFromBinIndex(point.bin));
+        point.bin = Math.min(hist.getNumBins(), Math.max(0, bin));
+      }
+      histogramController?.applyHistogramLutFromBins(0);
+    } else {
+      histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
+    }
+    histogramPointsSource = { volume: v, histogram: hist };
   }
   drawHistogramFromVolume(v, channelIndex);
 
