@@ -26,6 +26,7 @@ import FileSaver from "../src/FileSaver";
 import {
   CameraMode,
   createHistogramSelection,
+  createLinearHistogramOpacityPoints,
   createInitialState,
   DEFAULT_TEST_DATA,
 } from "./app/state/stateService";
@@ -386,8 +387,7 @@ function showChannelUI(volume: Volume) {
             const hist = volume.getHistogram(j) as any;
             const bins = hist?.bins ?? hist?.histogram;
             const maxBin = bins ? bins.length : 0;
-            histogramSelection.minBin = 0;
-            histogramSelection.maxBin = maxBin;
+            histogramSelection.points = createLinearHistogramOpacityPoints(0, maxBin);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -404,8 +404,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = hmin;
-            histogramSelection.maxBin = hmax;
+            histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -422,8 +421,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = b;
-            histogramSelection.maxBin = e;
+            histogramSelection.points = createLinearHistogramOpacityPoints(b, e);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -440,8 +438,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = hmin;
-            histogramSelection.maxBin = hmax;
+            histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -459,8 +456,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = hmin;
-            histogramSelection.maxBin = hmax;
+            histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -713,8 +709,7 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   updateChannelUI(currentVol, channelIndex)
 
   if (channelIndex === 0) {
-    histogramSelection.minBin = hmin;
-    histogramSelection.maxBin = hmax;
+    histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
   }
   drawHistogramFromVolume(v, channelIndex);
 

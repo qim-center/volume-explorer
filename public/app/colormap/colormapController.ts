@@ -81,15 +81,19 @@ export function createColormapController(options: ColormapControllerOptions) {
   };
 
   const getTransparencyRange = (lut: Lut): ColormapRange | null => {
-    let minBin: number | null = null;
-    for (const controlPoint of lut.controlPoints) {
-      if (controlPoint.opacity <= 0) {
-        minBin = controlPoint.x;
-      } else if (controlPoint.opacity >= 1) {
-        return minBin !== null && controlPoint.x > minBin ? { minBin, maxBin: controlPoint.x } : null;
-      }
+    const points = lut.controlPoints;
+    if (points.length < 2) {
+      return null;
     }
-    return null;
+    let first = 0;
+    while (first < points.length - 1 && points[first + 1].opacity === points[0].opacity) {
+      first++;
+    }
+    let last = points.length - 1;
+    while (last > first && points[last - 1].opacity === points[points.length - 1].opacity) {
+      last--;
+    }
+    return points[last].x > points[first].x ? { minBin: points[first].x, maxBin: points[last].x } : null;
   };
 
   const getChannelColormapRange = (volume: Volume, channelIndex: number): ColormapRange => {
