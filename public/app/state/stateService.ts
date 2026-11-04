@@ -5,13 +5,15 @@ export type CropAxis = "x" | "y" | "z";
 export type CameraMode = "X" | "Y" | "Z" | "3D" | "ORTHO";
 export type CropStateKey = "cropXmin" | "cropXmax" | "cropYmin" | "cropYmax" | "cropZmin" | "cropZmax";
 
+export interface HistogramOpacityPoint {
+  bin: number;
+  opacity: number;
+}
+
 export interface HistogramSelection {
-  minBin: number;
-  maxBin: number;
-  dragging: "min" | "max" | null;
-  hover: "min" | "max" | null;
-  minHandleHoverWeight: number;
-  maxHandleHoverWeight: number;
+  points: HistogramOpacityPoint[];
+  dragging: HistogramOpacityPoint | null;
+  hover: HistogramOpacityPoint | null;
 }
 
 export const CROP_AXES: CropAxis[] = ["x", "y", "z"];
@@ -133,14 +135,18 @@ export function createInitialState(): State {
   };
 }
 
+export function createLinearHistogramOpacityPoints(minBin: number, maxBin: number): HistogramOpacityPoint[] {
+  return [
+    { bin: minBin, opacity: 0 },
+    { bin: maxBin, opacity: 1 },
+  ];
+}
+
 export function createHistogramSelection(): HistogramSelection {
   return {
-    minBin: 0,
-    maxBin: 255,
+    points: createLinearHistogramOpacityPoints(0, 255),
     dragging: null,
     hover: null,
-    minHandleHoverWeight: 0,
-    maxHandleHoverWeight: 0,
   };
 }
 
