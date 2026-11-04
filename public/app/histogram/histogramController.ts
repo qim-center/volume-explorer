@@ -1,12 +1,11 @@
 import { Color } from "three";
-import { Lut, View3d, Volume } from "../../../src";
-import { HistogramSelection } from "../state/stateService";
-import { formatHistogramValue, histogramBinFromX, histogramBinToLut, lutToHistogramBin } from "../utils/math";
+import { ControlPoint, Lut, View3d, Volume } from "../../../src";
+import { HistogramOpacityPoint, HistogramSelection } from "../state/stateService";
+import { clamp01, formatHistogramValue, histogramBinFromX, histogramBinToLut, lutToHistogramBin } from "../utils/math";
 
 interface HistogramControllerOptions {
   canvas: HTMLCanvasElement | null;
-  minTag: HTMLElement | null;
-  maxTag: HTMLElement | null;
+  pointTag: HTMLElement | null;
   selection: HistogramSelection;
   getVolume: () => Volume;
   getView3D: () => View3d;
@@ -41,7 +40,6 @@ const sampleColormapStops = (stopColors: Color[], t: number): [number, number, n
 const COLORS = {
   silhouette: "#c9c9c3",
   rampFill: "rgba(255, 255, 255, 0.22)",
-  fullOpacity: "rgba(255, 255, 255, 0.5)",
   ink: "#1b1c1b",
   white: "#ffffff",
 };
@@ -52,13 +50,15 @@ const getAccentColor = (): string => {
   return value || "#fc7323";
 };
 
-const HANDLE_WIDTH = 1.5;
-const GRIP_RADIUS = 6;
-const GRIP_HOVER_BONUS = 1.5;
+const LINE_WIDTH = 1.5;
+const POINT_RADIUS = 6;
+const POINT_HOVER_BONUS = 1.5;
+const POINT_HIT_RADIUS = 12;
+const TAG_GAP = 4;
 
 export function createHistogramController(options: HistogramControllerOptions) {
-  const { canvas, minTag, maxTag, selection, getVolume, getView3D, getColormapStops, getColormapRange, onLutUpdated } = options;
-  let histogramHandleAnimationFrame: number | null = null;
+  const { canvas, pointTag, selection, getVolume, getView3D, getColormapStops, getColormapRange, onLutUpdated } =
+    options;
 
   const resizeCanvasToDisplay = (): { width: number; height: number; dpr: number } | null => {
     if (!canvas) {
@@ -75,29 +75,37 @@ export function createHistogramController(options: HistogramControllerOptions) {
     return { width: canvas.width, height: canvas.height, dpr };
   };
 
-  const updateTags = (hist: any, minBin: number, maxBin: number, binCount: number): void => {
+  const pointToCanvas = (
+    point: HistogramOpacityPoint,
+    binCount: number,
+    width: number,
+    height: number
+  ): [number, number] => [(point.bin / binCount) * width, (1 - point.opacity) * height];
+
+  const updateTag = (hist: any, binCount: number): void => {
+    if (!pointTag || !canvas) {
+      return;
+    }
+    const point = selection.dragging ?? selection.hover;
+    pointTag.hidden = !point || isHistogramDisabled();
+    if (!point || pointTag.hidden) {
+      return;
+    }
+
     const valueMin = hist.getValueFromBinIndex(0);
     const valueMax = hist.getValueFromBinIndex(binCount);
     const valueMaxAbs = Math.max(Math.abs(valueMin), Math.abs(valueMax));
-    // the handles move per display pixel, so that is the precision worth showing
-    const displayWidth = canvas?.getBoundingClientRect().width ?? 0;
-    const handleStep = (valueMax - valueMin) / (displayWidth > 0 ? displayWidth : binCount);
-    const formatTag = (binIndex: number): string =>
-      formatHistogramValue(hist.getValueFromBinIndex(binIndex), handleStep, valueMaxAbs);
+    const rect = canvas.getBoundingClientRect();
+    const step = (valueMax - valueMin) / (rect.width > 0 ? rect.width : binCount);
+    const value = formatHistogramValue(hist.getValueFromBinIndex(point.bin), step, valueMaxAbs);
+    pointTag.textContent = `${value} · ${Math.round(point.opacity * 100)}%`;
 
-    // tags are centred on their handle; long (scientific) labels are shifted at the edges
-    const placeTag = (tag: HTMLElement | null, binIndex: number): void => {
-      if (!tag) {
-        return;
-      }
-      tag.textContent = formatTag(binIndex);
-      const x = (binIndex / binCount) * displayWidth;
-      const reach = Math.max(0, tag.offsetWidth / 2);
-      const clamped = displayWidth > 2 * reach ? Math.min(Math.max(x, reach), displayWidth - reach) : x;
-      tag.style.left = displayWidth > 0 ? `${clamped}px` : `${(binIndex / binCount) * 100}%`;
-    };
-    placeTag(minTag, minBin);
-    placeTag(maxTag, maxBin);
+    const [x, y] = pointToCanvas(point, binCount, rect.width, rect.height);
+    const reach = pointTag.offsetWidth / 2;
+    const left = rect.width > 2 * reach ? Math.min(Math.max(x, reach), rect.width - reach) : x;
+    const above = y - POINT_RADIUS - TAG_GAP - pointTag.offsetHeight;
+    pointTag.style.left = `${left}px`;
+    pointTag.style.top = `${above >= 0 ? above : y + POINT_RADIUS + TAG_GAP}px`;
   };
 
   const drawHistogramFromVolume = (volume: Volume, channelIndex: number): void => {
@@ -168,59 +176,36 @@ export function createHistogramController(options: HistogramControllerOptions) {
     }
 
     if (!isHistogramDisabled()) {
-      const minB = selection.minBin;
-      const maxB = selection.maxBin;
-      const x0 = (minB / bins.length) * w;
-      const x1 = (maxB / bins.length) * w;
+      const curve = selection.points.map((point) =>
+        pointToCanvas(point, bins.length, w / dpr, h / dpr).map((v) => v * dpr)
+      );
+      const outline = [[0, curve[0][1]], ...curve, [w, curve[curve.length - 1][1]]];
 
-      if (x1 > x0) {
-        // opacity ramp: translucent triangle under the slope + solid accent slope edge
-        ctx.fillStyle = COLORS.rampFill;
+      ctx.fillStyle = COLORS.rampFill;
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      outline.forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = getAccentColor();
+      ctx.lineWidth = LINE_WIDTH * dpr;
+      ctx.beginPath();
+      outline.forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.stroke();
+
+      selection.points.forEach((point, i) => {
+        const active = point === selection.hover || point === selection.dragging;
         ctx.beginPath();
-        ctx.moveTo(x0, h);
-        ctx.lineTo(x1, 0);
-        ctx.lineTo(x1, h);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle = getAccentColor();
-        ctx.lineWidth = HANDLE_WIDTH * dpr;
-        ctx.beginPath();
-        ctx.moveTo(x0, h);
-        ctx.lineTo(x1, 0);
-        ctx.stroke();
-      }
-
-      // right of the max handle: full opacity (translucent white, hue-free)
-      ctx.fillStyle = COLORS.fullOpacity;
-      ctx.fillRect(x1, 0, Math.max(0, w - x1), h);
-
-      const minHover = selection.hover === "min" || selection.dragging === "min";
-      const maxHover = selection.hover === "max" || selection.dragging === "max";
-      const minWeight = minHover ? Math.max(selection.minHandleHoverWeight, 0.01) : selection.minHandleHoverWeight;
-      const maxWeight = maxHover ? Math.max(selection.maxHandleHoverWeight, 0.01) : selection.maxHandleHoverWeight;
-
-      const drawHandle = (x: number, hoverWeight: number): void => {
-        ctx.strokeStyle = getAccentColor();
-        ctx.lineWidth = HANDLE_WIDTH * dpr;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
-        ctx.stroke();
-
-        const gripRadius = (GRIP_RADIUS + GRIP_HOVER_BONUS * hoverWeight) * dpr;
-        ctx.beginPath();
-        ctx.arc(x, h / 2, gripRadius, 0, Math.PI * 2);
+        ctx.arc(curve[i][0], curve[i][1], (POINT_RADIUS + (active ? POINT_HOVER_BONUS : 0)) * dpr, 0, Math.PI * 2);
         ctx.fillStyle = COLORS.white;
         ctx.fill();
         ctx.stroke();
-      };
-
-      drawHandle(x0, minWeight);
-      drawHandle(x1, maxWeight);
+      });
     }
 
-    updateTags(hist, selection.minBin, selection.maxBin, bins.length);
+    updateTag(hist, bins.length);
   };
 
   const isHistogramDisabled = (): boolean => {
@@ -234,62 +219,24 @@ export function createHistogramController(options: HistogramControllerOptions) {
       return;
     }
 
-    const min = selection.minBin;
-    const max = selection.maxBin;
-
     const hist = volume.getHistogram(channelIndex);
-    const lutMin = histogramBinToLut(hist, min);
-    const lutMax = histogramBinToLut(hist, max);
+    const { points } = selection;
+    const controlPoints: ControlPoint[] = points.map((point) => ({
+      x: histogramBinToLut(hist, point.bin),
+      opacity: point.opacity,
+      color: [255, 255, 255],
+    }));
+    controlPoints.unshift({ x: 0, opacity: points[0].opacity, color: [255, 255, 255] });
+    controlPoints.push({ x: 255, opacity: points[points.length - 1].opacity, color: [255, 255, 255] });
 
     const view3d = getView3D();
-    const lut = isHistogramDisabled() ? new Lut().createNoTransparency() : new Lut().createFromMinMax(lutMin, lutMax);
+    const lut = isHistogramDisabled()
+      ? new Lut().createNoTransparency()
+      : new Lut().createFromControlPoints(controlPoints);
     volume.setLut(channelIndex, lut);
     onLutUpdated?.(volume, channelIndex);
     view3d.updateLuts(volume);
     drawHistogramFromVolume(volume, channelIndex);
-  };
-
-  const animateHistogramHandleHover = () => {
-    const volume = getVolume();
-    if (!volume) {
-      selection.minHandleHoverWeight = 0;
-      selection.maxHandleHoverWeight = 0;
-      histogramHandleAnimationFrame = null;
-      return;
-    }
-
-    const targetMin = selection.hover === "min" || selection.dragging === "min" ? 1 : 0;
-    const targetMax = selection.hover === "max" || selection.dragging === "max" ? 1 : 0;
-    const easing = 0.25;
-
-    selection.minHandleHoverWeight += (targetMin - selection.minHandleHoverWeight) * easing;
-    selection.maxHandleHoverWeight += (targetMax - selection.maxHandleHoverWeight) * easing;
-
-    const minDone = Math.abs(targetMin - selection.minHandleHoverWeight) < 0.01;
-    const maxDone = Math.abs(targetMax - selection.maxHandleHoverWeight) < 0.01;
-
-    if (minDone) {
-      selection.minHandleHoverWeight = targetMin;
-    }
-    if (maxDone) {
-      selection.maxHandleHoverWeight = targetMax;
-    }
-
-    drawHistogramFromVolume(volume, 0);
-
-    if (minDone && maxDone) {
-      histogramHandleAnimationFrame = null;
-      return;
-    }
-
-    histogramHandleAnimationFrame = window.requestAnimationFrame(animateHistogramHandleHover);
-  };
-
-  const requestHistogramHandleAnimation = () => {
-    if (histogramHandleAnimationFrame !== null) {
-      return;
-    }
-    histogramHandleAnimationFrame = window.requestAnimationFrame(animateHistogramHandleHover);
   };
 
   const setupInteractions = (): void => {
@@ -297,57 +244,87 @@ export function createHistogramController(options: HistogramControllerOptions) {
       return;
     }
 
-    canvas.addEventListener("mousedown", (event) => {
-      const volume = getVolume();
-      if (!volume || isHistogramDisabled()) {
-        return;
-      }
-
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-
-      const hist = volume.getHistogram(0) as any;
-      const bins = hist.bins ?? hist.histogram;
-      if (!bins) {
-        return;
-      }
-
-      const b = histogramBinFromX(x, canvas, bins.length);
-
-      const dMin = Math.abs(b - selection.minBin);
-      const dMax = Math.abs(b - selection.maxBin);
-
-      selection.dragging = dMin < dMax ? "min" : "max";
-      requestHistogramHandleAnimation();
-    });
-
-    canvas.addEventListener("mousemove", (event) => {
+    let grabOffset = { x: 0, y: 0 };
+    const getPointer = (
+      event: MouseEvent
+    ): { x: number; y: number; bin: number; opacity: number; binCount: number } | null => {
       const volume = getVolume();
       if (!volume) {
-        return;
+        return null;
       }
-
-      const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-
       const hist = volume.getHistogram(0) as any;
       const bins = hist.bins ?? hist.histogram;
       if (!bins) {
+        return null;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left + grabOffset.x;
+      const y = event.clientY - rect.top + grabOffset.y;
+      const opacity = clamp01(1 - y / rect.height);
+      return { x, y, bin: histogramBinFromX(x, canvas, bins.length), opacity, binCount: bins.length };
+    };
+
+    const findPointAt = (x: number, y: number, binCount: number): HistogramOpacityPoint | null => {
+      const rect = canvas.getBoundingClientRect();
+      let nearest: HistogramOpacityPoint | null = null;
+      let nearestDistance = POINT_HIT_RADIUS;
+      for (const point of selection.points) {
+        const [px, py] = pointToCanvas(point, binCount, rect.width, rect.height);
+        const distance = Math.hypot(x - px, y - py);
+        if (distance <= nearestDistance) {
+          nearest = point;
+          nearestDistance = distance;
+        }
+      }
+      return nearest;
+    };
+
+    const redraw = (): void => {
+      const volume = getVolume();
+      if (volume) {
+        drawHistogramFromVolume(volume, 0);
+      }
+    };
+
+    canvas.addEventListener("pointerdown", (event) => {
+      const pointer = getPointer(event);
+      if (!pointer || isHistogramDisabled()) {
+        return;
+      }
+      const hit = findPointAt(pointer.x, pointer.y, pointer.binCount);
+      if (!hit) {
+        return;
+      }
+      canvas.setPointerCapture(event.pointerId);
+      const rect = canvas.getBoundingClientRect();
+      const [px, py] = pointToCanvas(hit, pointer.binCount, rect.width, rect.height);
+      grabOffset = { x: px - pointer.x, y: py - pointer.y };
+      selection.dragging = hit;
+      redraw();
+    });
+
+    // double-click adds a ramp point, or removes one (at least two are kept)
+    canvas.addEventListener("dblclick", (event) => {
+      const pointer = getPointer(event);
+      if (!pointer || isHistogramDisabled()) {
         return;
       }
 
-      if (selection.dragging && !isHistogramDisabled()) {
-        const b = histogramBinFromX(x, canvas, bins.length);
+      const { points } = selection;
+      const hit = findPointAt(pointer.x, pointer.y, pointer.binCount);
+      if (!hit) {
+        points.push({ bin: pointer.bin, opacity: pointer.opacity });
+        points.sort((a, b) => a.bin - b.bin);
+      } else if (points.length > 2) {
+        points.splice(points.indexOf(hit), 1);
+        selection.hover = null;
+      }
+      applyHistogramLutFromBins(0);
+    });
 
-        if (selection.dragging === "min") {
-          selection.minBin = Math.min(b, selection.maxBin);
-        } else {
-          selection.maxBin = Math.max(b, selection.minBin);
-        }
-
-        applyHistogramLutFromBins(0);
-        drawHistogramFromVolume(volume, 0);
-        requestHistogramHandleAnimation();
+    canvas.addEventListener("pointermove", (event) => {
+      const pointer = getPointer(event);
+      if (!pointer) {
         return;
       }
 
@@ -358,43 +335,41 @@ export function createHistogramController(options: HistogramControllerOptions) {
         return;
       }
 
-      const displayWidth = canvas.getBoundingClientRect().width;
-      const minX = (selection.minBin / bins.length) * displayWidth;
-      const maxX = (selection.maxBin / bins.length) * displayWidth;
-      const distMin = Math.abs(x - minX);
-      const distMax = Math.abs(x - maxX);
-      const nextHover = Math.min(distMin, distMax) <= 6 ? (distMin <= distMax ? "min" : "max") : null;
-
-      if (nextHover !== selection.hover) {
-        selection.hover = nextHover;
-        requestHistogramHandleAnimation();
+      if (selection.dragging) {
+        selection.dragging.bin = pointer.bin;
+        selection.dragging.opacity = pointer.opacity;
+        selection.points.sort((a, b) => a.bin - b.bin);
+        applyHistogramLutFromBins(0);
+        return;
       }
 
-      canvas.style.cursor = nextHover ? "ew-resize" : "default";
+      const nextHover = findPointAt(pointer.x, pointer.y, pointer.binCount);
+      if (nextHover !== selection.hover) {
+        selection.hover = nextHover;
+        redraw();
+      }
+      canvas.style.cursor = nextHover ? "move" : "default";
     });
 
-    canvas.addEventListener("mouseup", () => {
+    canvas.addEventListener("lostpointercapture", () => {
       selection.dragging = null;
-      requestHistogramHandleAnimation();
+      grabOffset = { x: 0, y: 0 };
+      redraw();
     });
 
-    canvas.addEventListener("mouseleave", () => {
-      selection.dragging = null;
+    canvas.addEventListener("pointerleave", () => {
+      if (selection.dragging) {
+        return;
+      }
       selection.hover = null;
       canvas.style.cursor = "default";
-      requestHistogramHandleAnimation();
+      redraw();
     });
-  };
-
-  const setSelectionBins = (minBin: number, maxBin: number): void => {
-    selection.minBin = minBin;
-    selection.maxBin = maxBin;
   };
 
   return {
     applyHistogramLutFromBins,
     drawHistogramFromVolume,
-    setSelectionBins,
     setupInteractions,
   };
 }
