@@ -8,6 +8,7 @@ import GUI from "lil-gui";
 
 import { colormaps as colorizercolormaps, features as colorizerfeatures } from "./colorizer";
 import {
+  Histogram,
   ImageInfo,
   IVolumeLoader,
   LoadSpec,
@@ -29,13 +30,14 @@ import {
   DEFAULT_TEST_DATA,
 } from "./app/state/stateService";
 import { createCropSliceManager } from "./app/crop/cropSliceManager";
+import { createTimeController } from "./app/time/timeController";
 import { getSourceLoadErrorMessage, SCALE_TOO_LARGE_MESSAGE } from "./app/errors/errorHandling";
 import {
   removeFolderByName as removeAdvancedGuiFolderByName,
   setupAdvancedGui,
   updateChannelIsovalueRange,
 } from "./app/gui/advancedGuiBuilder";
-import { bindPlaybackAndRenderControls, bindPrimaryViewControls } from "./app/ui/eventBinder";
+import { bindRenderControls, bindPrimaryViewControls } from "./app/ui/eventBinder";
 import { setupRangeFillSync } from "./app/ui/sliderFill";
 import { getAppUiElements } from "./app/ui/elementRegistry";
 import { setupExportMenu } from "./app/ui/exportMenu";
@@ -46,7 +48,13 @@ import { createHistogramController } from "./app/histogram/histogramController";
 import { createColormapController } from "./app/colormap/colormapController";
 import { createLoaderOrchestration } from "./app/loaders/loaderOrchestration";
 import { rgb01ToHex } from "./app/utils/color";
-import { densitySliderToView3D, gammaSliderToImageValues, histogramBinToLut } from "./app/utils/math";
+import {
+  densitySliderToView3D,
+  gammaSliderToImageValues,
+  histogramBinToLut,
+  histogramValueToLut,
+  lutToHistogramValue,
+} from "./app/utils/math";
 import { inferVolumeFileFormat } from "./app/utils/source";
 
 const CACHE_MAX_SIZE = 1_000_000_000;
@@ -54,7 +62,6 @@ const DEFAULT_CONCURRENCY_LIMIT = 8;
 const PREFETCH_CONCURRENCY_LIMIT = 3;
 const PREFETCH_DISTANCE: [number, number, number, number] = [5, 5, 5, 5];
 const MAX_PREFETCH_CHUNKS = 25;
-const PLAYBACK_INTERVAL = 80;
 
 const TEST_DATA = DEFAULT_TEST_DATA as Record<string, TestDataSpec>;
 
@@ -112,8 +119,6 @@ const MAX_ACTIVE_REQUESTS = getMaxActiveRequestsFromUrl();
 
 const loaderContext = new VolumeLoaderContext(CACHE_MAX_SIZE, MAX_ACTIVE_REQUESTS, PREFETCH_CONCURRENCY_LIMIT);
 
-const getNumberOfTimesteps = (): number => myState.totalFrames || myState.volume.imageInfo.times;
-
 const histogramSelection = createHistogramSelection();
 let histogramController: ReturnType<typeof createHistogramController> | null = null;
 let colormapController: ReturnType<typeof createColormapController> | null = null;
@@ -125,6 +130,11 @@ const cropSliceManager = createCropSliceManager({
     syncCropHandlesFromState();
     updateOmeZarrScaleSelect(myState.volume);
   },
+});
+const timeController = createTimeController({
+  state: myState,
+  getView3D: () => view3D,
+  setSyncMultichannelLoading,
 });
 
 function applyCropRegionFromState() {
@@ -285,32 +295,6 @@ function removeFolderByName(name: string) {
     return;
   }
   removeAdvancedGuiFolderByName(gui, name);
-}
-
-function updateTimeUI() {
-  const totalFrames = getNumberOfTimesteps();
-
-  const timeSlider = document.getElementById("timeSlider") as HTMLInputElement;
-  if (timeSlider) {
-    timeSlider.max = `${totalFrames - 1}`;
-  }
-  const timeInput = document.getElementById("timeValue") as HTMLInputElement;
-  if (timeInput) {
-    timeInput.max = `${totalFrames - 1}`;
-  }
-
-  const playBtn = document.getElementById("playBtn");
-  if (totalFrames < 2) {
-    (playBtn as HTMLButtonElement).disabled = true;
-  } else {
-    (playBtn as HTMLButtonElement).disabled = false;
-  }
-  const pauseBtn = document.getElementById("pauseBtn");
-  if (totalFrames < 2) {
-    (pauseBtn as HTMLButtonElement).disabled = true;
-  } else {
-    (pauseBtn as HTMLButtonElement).disabled = false;
-  }
 }
 
 function updateScenesUI() {
@@ -668,44 +652,94 @@ function loadImageData(jsonData: ImageInfo, volumeData: Uint8Array[]) {
   return vol;
 }
 
+let displayedVolume: Volume | null = null;
+let displayedHistograms: Histogram[] = [];
+let displayedDimsKey = "";
+
+function getDimsKey(volume: Volume): string {
+  const { volumeSize, subregionSize, subregionOffset } = volume.imageInfo;
+  return [...volumeSize.toArray(), ...subregionSize.toArray(), ...subregionOffset.toArray()].join(",");
+}
+
+function remapDisplayRangesToHistogram(previous: Histogram, next: Histogram) {
+  const remapBin = (bin: number): number =>
+    Math.min(next.getNumBins(), Math.max(0, next.findFractionalBinOfValue(previous.getValueFromBinIndex(bin))));
+  const remapLut = (lut: number): number => histogramValueToLut(next, lutToHistogramValue(previous, lut));
+
+  histogramSelection.minBin = remapBin(histogramSelection.minBin);
+  histogramSelection.maxBin = remapBin(histogramSelection.maxBin);
+  myState.colormapMin = remapLut(myState.colormapMin);
+  myState.colormapMax = remapLut(myState.colormapMax);
+}
+
 function onChannelDataArrived(v: Volume, channelIndex: number) {
-  const currentVol = v; // myState.volume;
-  const LUT_MIN_PERCENTILE = 0.5;
-  const LUT_MAX_PERCENTILE = 0.983;
+  if (displayedVolume !== v) {
+    displayedVolume = v;
+    displayedHistograms = [];
+    displayedDimsKey = "";
+  }
+
   const hist = v.getHistogram(channelIndex);
-  const hmin = hist.findBinOfPercentile(LUT_MIN_PERCENTILE);
-  const hmax = hist.findBinOfPercentile(LUT_MAX_PERCENTILE);
-  const lut = new Lut().createFromMinMax(
-    scaleHistogramBinToLut(v, channelIndex, hmin),
-    scaleHistogramBinToLut(v, channelIndex, hmax)
-  );
-  v.setLut(channelIndex, lut);
+  const previousHist = displayedHistograms[channelIndex];
+  displayedHistograms[channelIndex] = hist;
+  const rangeChanged =
+    !previousHist || previousHist.getDataMin() !== hist.getDataMin() || previousHist.getDataMax() !== hist.getDataMax();
 
-  view3D.onVolumeData(currentVol, [channelIndex]);
-  view3D.setVolumeChannelEnabled(currentVol, channelIndex, myState.channelGui[channelIndex].enabled);
+  if (!previousHist) {
+    const LUT_MIN_PERCENTILE = 0.5;
+    const LUT_MAX_PERCENTILE = 0.983;
+    const hmin = hist.findBinOfPercentile(LUT_MIN_PERCENTILE);
+    const hmax = hist.findBinOfPercentile(LUT_MAX_PERCENTILE);
+    const lut = new Lut().createFromMinMax(
+      scaleHistogramBinToLut(v, channelIndex, hmin),
+      scaleHistogramBinToLut(v, channelIndex, hmax)
+    );
+    v.setLut(channelIndex, lut);
 
-  view3D.updateActiveChannels(currentVol);
-  applyColormapToChannel(currentVol, channelIndex);
-  view3D.updateLuts(currentVol);
+    if (channelIndex === 0) {
+      histogramSelection.minBin = hmin;
+      histogramSelection.maxBin = hmax;
+    }
+  } else if (rangeChanged && channelIndex === 0) {
+    remapDisplayRangesToHistogram(previousHist, hist);
+  }
 
-  if (currentVol.isLoaded()) {
-    console.log("currentVol with name " + currentVol.name + " is loaded");
+  view3D.onVolumeData(v, [channelIndex]);
+  view3D.setVolumeChannelEnabled(v, channelIndex, myState.channelGui[channelIndex].enabled);
+  view3D.updateActiveChannels(v);
+
+  // with an unchanged data range the lut and colormap palette are still valid for the new data
+  if (rangeChanged) {
+    if (previousHist && channelIndex === 0) {
+      // the remapped colormap range is shared by every channel
+      applyColormapToVolume(v);
+    } else {
+      applyColormapToChannel(v, channelIndex);
+      view3D.updateLuts(v);
+    }
+    updateChannelUI(v, channelIndex);
+  }
+
+  if (v.isLoaded()) {
     setVolumeLoading(false);
+    scaleSelectApi?.refreshLabel(v);
   }
-  updateChannelUI(currentVol, channelIndex)
 
+  // the histogram canvas and its window belong to channel 0
   if (channelIndex === 0) {
-    histogramSelection.minBin = hmin;
-    histogramSelection.maxBin = hmax;
+    drawHistogramFromVolume(v, 0);
   }
-  drawHistogramFromVolume(v, channelIndex);
 
-  // Scale-level changes update dimensions asynchronously; refresh crop and slice controls to match new bounds.
-  remapSliceIndicesForRescaledVolume(v);
-  syncCropInputsFromState();
-  updateZSliceUI(v);
-  updateSliceSelectorUI();
-  applyCropRegionFromState();
+  // timesteps keep the dimensions, so stepping through time skips this.
+  const dimsKey = getDimsKey(v);
+  if (dimsKey !== displayedDimsKey) {
+    displayedDimsKey = dimsKey;
+    remapSliceIndicesForRescaledVolume(v);
+    syncCropInputsFromState();
+    updateZSliceUI(v);
+    updateSliceSelectorUI();
+    applyCropRegionFromState();
+  }
 
   view3D.redraw();
 }
@@ -741,7 +775,7 @@ function onVolumeCreated(name: string, volume: Volume) {
     view3D.enablePicking(myState.volume, false);
   }
 
-  updateTimeUI();
+  timeController.resetForVolume();
   updateScenesUI();
   updateZSliceUI(myState.volume);
   resetSliceIndicesForVolume(myState.volume);
@@ -752,49 +786,6 @@ function onVolumeCreated(name: string, volume: Volume) {
 
 function setSyncMultichannelLoading(sync: boolean) {
   myState.loader.forEach((loader) => loader.syncMultichannelLoading(sync));
-}
-
-function playTimeSeries(onNewFrameCallback: () => void) {
-  window.clearTimeout(myState.timerId);
-  setSyncMultichannelLoading(true);
-  myState.isPlaying = true;
-
-  const loadNextFrame = () => {
-    myState.lastFrameTime = Date.now();
-    const nextFrame = (myState.currentFrame + 1) % getNumberOfTimesteps();
-
-    // TODO would be real nice if this were an `await`-able promise instead...
-    void view3D.setTime(myState.volume, nextFrame, (vol) => {
-      if (vol.isLoaded()) {
-        myState.currentFrame = nextFrame;
-        onNewFrameCallback();
-
-        if (myState.isPlaying) {
-          const timeLoading = Date.now() - myState.lastFrameTime;
-          myState.timerId = window.setTimeout(loadNextFrame, PLAYBACK_INTERVAL - timeLoading);
-        }
-      }
-    });
-  };
-
-  loadNextFrame();
-}
-
-function getCurrentFrame() {
-  return myState.currentFrame;
-}
-
-function goToFrame(targetFrame: number): boolean {
-  console.log("going to Frame " + targetFrame);
-  const outOfBounds = targetFrame > getNumberOfTimesteps() - 1 || targetFrame < 0;
-  if (outOfBounds) {
-    console.log(`frame ${targetFrame} out of bounds`);
-    return false;
-  }
-
-  void view3D.setTime(myState.volume, targetFrame);
-  myState.currentFrame = targetFrame;
-  return true;
 }
 
 function goToZSlice(slice: number): boolean {
@@ -875,8 +866,10 @@ function main() {
     return;
   }
   view3D = new View3d({ parentElement: el });
-  view3D.setLoadStartHandler(() => {
-    setVolumeLoading(true);
+  view3D.setLoadStartHandler((volume) => {
+    if (volume.loadSpecRequired.time === volume.loadSpec.time) {
+      setVolumeLoading(true);
+    }
   });
   view3D.setBackgroundColor(myState.backgroundColor);
   view3D.setScaleBarPosition(20, 24, ViewportCorner.BOTTOM_RIGHT);
@@ -1000,7 +993,8 @@ function main() {
     const type = await inferVolumeFileFormat(source);
     if (!type) {
       setSourceError(
-        "Invalid URL type. Supported types: .zarr, .ome.zarr, .tif, .tiff, .ome.tif, .ome.tiff, or a URL with Zarr metadata"
+        "Unsupported source. Supported: OME-Zarr (.zarr, .ome.zarr, or a URL with Zarr metadata), " +
+          "TIFF/OME-TIFF (.tif, .tiff, .ome.tif, .ome.tiff), HDF5 (.h5, .hdf5)"
       );
       clearView();
       return;
@@ -1147,14 +1141,9 @@ function main() {
     view3D.setMaxProjectMode(myState.volume, mp);
   };
 
-  bindPlaybackAndRenderControls({
+  bindRenderControls({
     state: myState,
     view3D,
-    getNumberOfTimesteps,
-    playTimeSeries,
-    getCurrentFrame,
-    goToFrame,
-    setSyncMultichannelLoading,
     onSceneChange: (nextScene: number) => {
       if (myState.loader.length > 1 && myState.scene !== nextScene) {
         myState.scene = nextScene;
@@ -1210,6 +1199,7 @@ function main() {
 
   setupCropControls();
   setupSliceSelectorControls();
+  timeController.setupTimeControls();
   setupGui(el);
 
   if (ui.panelLeft && ui.panelLeftHeader && ui.panelLeftCollapse && ui.panelRight && ui.panelRightHeader && ui.panelRightCollapse) {

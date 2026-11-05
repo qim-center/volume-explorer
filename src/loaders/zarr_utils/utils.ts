@@ -144,6 +144,21 @@ export function getScale(dataset: OMEDataset | OMEMultiscale, orderTCZYX: TCZYX<
   return orderByTCZYX(scale, orderTCZYX, 1);
 }
 
+// fills in a scale transform for each dataset that lacks one (OME-Zarr v0.3 and earlier)
+export function fillMissingScaleTransforms(datasets: OMEDataset[], scaleLevels: NumericZarrArray[]): OMEDataset[] {
+  const shape0 = scaleLevels[0].shape;
+  return datasets.map((dataset, i) => {
+    if (dataset.coordinateTransformations?.some(({ type }) => type === "scale")) {
+      return dataset;
+    }
+    const scaleTransform: OMECoordinateTransformation = {
+      type: "scale",
+      scale: scaleLevels[i].shape.map((size, dim) => shape0[dim] / size),
+    };
+    return { ...dataset, coordinateTransformations: [...(dataset.coordinateTransformations ?? []), scaleTransform] };
+  });
+}
+
 /**
  * Defines a partial order of zarr arrays based on their size. Specifically:
  * - If array size x, y, z are all equal, the arrays are equal

@@ -8,14 +8,9 @@ interface BindPrimaryViewControlsOptions {
   view3D: View3d;
 }
 
-interface BindPlaybackAndRenderControlsOptions {
+interface BindRenderControlsOptions {
   state: State;
   view3D: View3d;
-  getNumberOfTimesteps: () => number;
-  playTimeSeries: (onNewFrameCallback: () => void) => void;
-  getCurrentFrame: () => number;
-  goToFrame: (targetFrame: number) => boolean;
-  setSyncMultichannelLoading: (sync: boolean) => void;
   onSceneChange: (scene: number) => void;
   goToZSlice: (slice: number) => boolean;
   changeRenderMode: (pt: boolean, mp: boolean) => void;
@@ -118,20 +113,8 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
   }
 }
 
-export function bindPlaybackAndRenderControls(options: BindPlaybackAndRenderControlsOptions): void {
-  const {
-    state,
-    view3D,
-    getNumberOfTimesteps,
-    playTimeSeries,
-    getCurrentFrame,
-    goToFrame,
-    setSyncMultichannelLoading,
-    onSceneChange,
-    goToZSlice,
-    changeRenderMode,
-    gammaSliderToImageValues,
-  } = options;
+export function bindRenderControls(options: BindRenderControlsOptions): void {
+  const { state, view3D, onSceneChange, goToZSlice, changeRenderMode, gammaSliderToImageValues } = options;
 
   const flipXBtn = document.getElementById("flipXBtn");
   flipXBtn?.addEventListener("click", () => {
@@ -149,69 +132,7 @@ export function bindPlaybackAndRenderControls(options: BindPlaybackAndRenderCont
     view3D.setFlipVolume(state.volume, state.flipX, state.flipY, state.flipZ as -1 | 1);
   });
 
-  const forwardBtn = document.getElementById("forwardBtn");
-  const backBtn = document.getElementById("backBtn");
-  const timeSlider = document.getElementById("timeSlider") as HTMLInputElement;
-  const timeInput = document.getElementById("timeValue") as HTMLInputElement;
   const sceneInput = document.getElementById("sceneValue") as HTMLInputElement;
-
-  const playBtn = document.getElementById("playBtn");
-  playBtn?.addEventListener("click", () => {
-    if (state.currentFrame >= getNumberOfTimesteps() - 1) {
-      state.currentFrame = -1;
-    }
-    playTimeSeries(() => {
-      if (timeInput) {
-        timeInput.value = "" + getCurrentFrame();
-      }
-      if (timeSlider) {
-        timeSlider.value = "" + getCurrentFrame();
-      }
-    });
-  });
-
-  const pauseBtn = document.getElementById("pauseBtn");
-  pauseBtn?.addEventListener("click", () => {
-    window.clearTimeout(state.timerId);
-    state.isPlaying = false;
-    setSyncMultichannelLoading(false);
-  });
-
-  forwardBtn?.addEventListener("click", () => {
-    if (goToFrame(getCurrentFrame() + 1)) {
-      if (timeInput) {
-        timeInput.value = "" + getCurrentFrame();
-      }
-      if (timeSlider) {
-        timeSlider.value = "" + getCurrentFrame();
-      }
-    }
-  });
-  backBtn?.addEventListener("click", () => {
-    if (goToFrame(getCurrentFrame() - 1)) {
-      if (timeInput) {
-        timeInput.value = "" + getCurrentFrame();
-      }
-      if (timeSlider) {
-        timeSlider.value = "" + getCurrentFrame();
-      }
-    }
-  });
-
-  timeSlider?.addEventListener("change", () => {
-    if (goToFrame(timeSlider?.valueAsNumber)) {
-      if (timeInput) {
-        timeInput.value = timeSlider.value;
-      }
-    }
-  });
-  timeInput?.addEventListener("change", () => {
-    if (goToFrame(timeInput?.valueAsNumber)) {
-      if (timeSlider) {
-        timeSlider.value = timeInput.value;
-      }
-    }
-  });
   sceneInput?.addEventListener("change", () => {
     onSceneChange(sceneInput.valueAsNumber);
   });
