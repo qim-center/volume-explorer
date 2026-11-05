@@ -39,6 +39,29 @@ import { remapUri } from "../utils/url_utils.js";
 
 const CHUNK_REQUEST_CANCEL_REASON = "chunk request cancelled";
 
+function reorderToZYX(
+  chunk: zarr.Chunk<zarr.NumberDataType>,
+  [, , z, y, x]: TCZYX<number>
+): zarr.TypedArray<zarr.NumberDataType> {
+  const { data, shape, stride } = chunk;
+  const [nz, sz] = z > -1 ? [shape[z], stride[z]] : [1, 0];
+  const [ny, sy, nx, sx] = [shape[y], stride[y], shape[x], stride[x]];
+  if (sx === 1 && sy === nx && (z === -1 || sz === nx * ny)) {
+    return data;
+  }
+
+  const out = new (data.constructor as new (length: number) => typeof data)(data.length);
+  let i = 0;
+  for (let zi = 0; zi < nz; zi++) {
+    for (let yi = 0; yi < ny; yi++) {
+      for (let xi = 0; xi < nx; xi++) {
+        out[i++] = data[zi * sz + yi * sy + xi * sx];
+      }
+    }
+  }
+  return out;
+}
+
 // returns the converted data and the original min and max values
 function convertChannel(
   channelData: zarr.TypedArray<zarr.NumberDataType>,
@@ -582,7 +605,7 @@ class OMEZarrLoader extends ThreadableVolumeLoader {
         return;
       }
 
-      const converted = convertChannel(result.data, level.dtype);
+      const converted = convertChannel(reorderToZYX(result, this.sources[sourceIdx].axesTCZYX), level.dtype);
       if (syncChannels) {
         resultChannelDtype.push(converted.dtype);
         resultChannelData.push(converted.data);
