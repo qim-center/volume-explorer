@@ -147,6 +147,11 @@ button { font-family: inherit; cursor: pointer; }
 .row.is-disabled { opacity: .5; pointer-events: none; }
 .row__value { font: 11px var(--mono); color: var(--label); min-width: 20px; }
 .slice-readout { font: 12px var(--mono); color: var(--accent); white-space: nowrap; }
+.time-row { gap: 2px; }
+.time-row .single-slider { margin-left: 6px; }
+.time-row .ghost svg { stroke: var(--ink); }
+#time-play[aria-pressed="true"] svg { stroke: var(--accent); opacity: 1; }
+#time-play[aria-pressed="true"] .time-play__play, #time-play[aria-pressed="false"] .time-play__pause { display: none; }
 .num { min-width: 34px; width: 44px; padding: 5px 6px; border: 1px solid var(--border); border-radius: var(--r-control);
   font: 12px var(--mono); text-align: center; color: var(--ink); background: var(--surface); }
 .num:focus { outline: 2px solid var(--accent); outline-offset: 1px; }

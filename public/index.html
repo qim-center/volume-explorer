@@ -157,6 +157,27 @@
           </section>
           <div class="divider" id="slice-divider" hidden></div>
 
+          <section class="section section--gap-12" id="time-section" hidden>
+            <div class="section__head">
+              <div class="section__label">Time</div>
+              <span id="time-readout" class="slice-readout" aria-live="polite"></span>
+            </div>
+            <div class="row time-row">
+              <button class="ghost" id="time-back" type="button" aria-label="Previous timestep">
+                <svg viewBox="0 0 16 16" width="14" height="14"><path d="M10 3 L5 8 l5 5" /></svg>
+              </button>
+              <button class="ghost" id="time-play" type="button" aria-label="Play time series" aria-pressed="false">
+                <svg class="time-play__play" viewBox="0 0 16 16" width="14" height="14"><path d="M5 3 L12 8 L5 13 Z" /></svg>
+                <svg class="time-play__pause" viewBox="0 0 16 16" width="14" height="14"><path d="M5.5 3 v10 M10.5 3 v10" /></svg>
+              </button>
+              <button class="ghost" id="time-forward" type="button" aria-label="Next timestep">
+                <svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3 l5 5 -5 5" /></svg>
+              </button>
+              <input id="time-slider" class="single-slider" type="range" min="0" max="0" step="1" value="0" aria-label="Timestep" />
+            </div>
+          </section>
+          <div class="divider" id="time-divider" hidden></div>
+
           <section class="section section--gap-12">
             <div class="section__label">Crop</div>
             <div class="row" id="crop-row-z">
@@ -338,12 +359,6 @@
           <input type="number" id="zValue" min="0" max="0" value="0" />
         </p>
 
-        <button id="playBtn">Play</button>
-        <button id="pauseBtn">Pause</button>
-        <button id="backBtn">Back</button>
-        <button id="forwardBtn">Forward</button>
-        <input id="timeSlider" type="range" min="0" max="0" step="1" value="0" />
-        <input type="number" id="timeValue" min="0" max="0" value="0" />
         <input type="number" id="sceneValue" min="0" max="0" value="0" />
       </div>
     </div>
