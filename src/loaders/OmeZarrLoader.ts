@@ -24,6 +24,7 @@ import {
 } from "./VolumeLoaderUtils.js";
 import ChunkPrefetchIterator from "./zarr_utils/ChunkPrefetchIterator.js";
 import {
+  fillMissingScaleTransforms,
   getScale,
   getSourceChannelMeta,
   matchSourceScaleLevels,
@@ -170,7 +171,7 @@ class OMEZarrLoader extends ThreadableVolumeLoader {
       validateOMEZarrMetadata(meta, scene, sourceName);
 
       const { multiscales, omero } = meta;
-      const multiscaleMetadata = multiscales[scene];
+      const multiscaleMetadata = { ...multiscales[scene] };
 
       // Open all scale levels of multiscale
       const lvlProms = multiscaleMetadata.datasets.map(({ path }) =>
@@ -185,6 +186,7 @@ class OMEZarrLoader extends ThreadableVolumeLoader {
           )
       );
       const scaleLevels = (await Promise.all(lvlProms)) as NumericZarrArray[];
+      multiscaleMetadata.datasets = fillMissingScaleTransforms(multiscaleMetadata.datasets, scaleLevels);
       const axesTCZYX = remapAxesToTCZYX(multiscaleMetadata.axes);
 
       return {
