@@ -1,16 +1,37 @@
 import { VolumeLoadError, VolumeLoadErrorType } from "../VolumeLoadError.js";
 import { OMEZarrMetadata } from "./types.js";
 
-/**
- * If `meta` is the top-level metadata of a zarr node formatted according to the OME-Zarr spec version 0.5, returns
- * the object formatted according to v0.4 of the spec. For our purposes this just means flattening out the `ome` key.
- *
- * Return type is `unknown` because this does no actual validation; use `validateOMEZarrMetadata` for that.
- */
-export const toOMEZarrMetaV4 = (meta: unknown): unknown => (meta as { ome?: unknown }).ome ?? meta;
-
 function isObjectWithProp<P extends string>(obj: unknown, prop: P): obj is Record<P, unknown> {
   return typeof obj === "object" && obj !== null && prop in obj;
+}
+
+/** OME-Zarr v0.1 and v0.2 have no `axes` entry: all arrays are implicitly 5D in TCZYX order */
+const LEGACY_AXIS_NAMES = ["t", "c", "z", "y", "x"];
+const LEGACY_AXIS_TYPES: Record<string, string> = { t: "time", c: "channel", z: "space", y: "space", x: "space" };
+
+/** OME-Zarr v0.3 lists axes as bare names (e.g. `["t", "z", "y", "x"]`); v0.4+ uses `{ name, type }` objects */
+const upgradeLegacyAxis = (axis: unknown): unknown =>
+  typeof axis === "string" ? { name: axis, type: LEGACY_AXIS_TYPES[axis] } : axis;
+
+function upgradeLegacyMultiscale(multiscale: unknown): unknown {
+  if (typeof multiscale !== "object" || multiscale === null) {
+    return multiscale;
+  }
+  const axes = isObjectWithProp(multiscale, "axes") ? multiscale.axes : LEGACY_AXIS_NAMES;
+  return { ...multiscale, axes: Array.isArray(axes) ? axes.map(upgradeLegacyAxis) : axes };
+}
+
+/**
+ * Returns the top-level metadata `meta` of a zarr node formatted according to v0.4 of the OME-Zarr spec:
+ * - v0.5: flattens out the `ome` key
+ * - v0.1-v0.3: fills in missing `axes` and converts axis names to axis objects
+ */
+export function toOMEZarrMetaV4(meta: unknown): unknown {
+  const flatMeta = (meta as { ome?: unknown }).ome ?? meta;
+  if (!isObjectWithProp(flatMeta, "multiscales") || !Array.isArray(flatMeta.multiscales)) {
+    return flatMeta;
+  }
+  return { ...flatMeta, multiscales: flatMeta.multiscales.map(upgradeLegacyMultiscale) };
 }
 
 function assertMetadataHasProp<P extends string>(

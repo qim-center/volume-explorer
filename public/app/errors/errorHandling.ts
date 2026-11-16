@@ -16,7 +16,7 @@ export function getSourceLoadErrorMessage(error: unknown): string {
     if (error.type === VolumeLoadErrorType.NOT_FOUND || error.type === VolumeLoadErrorType.LOAD_DATA_FAILED) {
       return "No data found at URL";
     }
-    if (error.type === VolumeLoadErrorType.TOO_LARGE) {
+    if (error.type === VolumeLoadErrorType.TOO_LARGE || error.type === VolumeLoadErrorType.INVALID_METADATA) {
       return error.message;
     }
   }

@@ -76,6 +76,7 @@ export default class Volume {
   private loaded: boolean;
   private levelDimsZYX: [number, number, number][];
   private requestedLevel?: number;
+  private timeSeriesChannelRanges: ([number, number] | undefined)[] = [];
 
   constructor(imageInfo: ImageInfo = defaultImageInfo(), loadSpec: LoadSpec = new LoadSpec(), loader?: IVolumeLoader) {
     this.loaded = false;
@@ -280,6 +281,18 @@ export default class Volume {
     return this.channels[channelIndex];
   }
 
+  private getChannelRangeAcrossTime(channelIndex: number, range: [number, number]): [number, number] {
+    if (this.imageInfo.times <= 1) {
+      return range;
+    }
+    const previous = this.timeSeriesChannelRanges[channelIndex];
+    const next: [number, number] = previous
+      ? [Math.min(previous[0], range[0]), Math.max(previous[1], range[1])]
+      : [range[0], range[1]];
+    this.timeSeriesChannelRanges[channelIndex] = next;
+    return next;
+  }
+
   onChannelLoaded(batch: number[]): void {
     // check to see if all channels are now loaded, and fire an event(?)
     if (this.loadSpec.channels.every((channelIndex) => this.channels[channelIndex].loaded)) {
@@ -305,13 +318,14 @@ export default class Volume {
     dtype: NumberType = "uint8",
     time = 0
   ): void {
+    const [min, max] = this.getChannelRangeAcrossTime(channelIndex, range);
     this.channels[channelIndex].setFromAtlas(
       atlasdata,
       atlaswidth,
       atlasheight,
       dtype,
-      range[0],
-      range[1],
+      min,
+      max,
       this.imageInfo.subregionSize,
       time
     );
@@ -332,6 +346,7 @@ export default class Volume {
     time = 0
   ): void {
     const { subregionSize, atlasTileDims } = this.imageInfo;
+    const [min, max] = this.getChannelRangeAcrossTime(channelIndex, range);
     this.channels[channelIndex].setFromVolumeData(
       volumeData,
       subregionSize.x,
@@ -339,8 +354,8 @@ export default class Volume {
       subregionSize.z,
       atlasTileDims.x * subregionSize.x,
       atlasTileDims.y * subregionSize.y,
-      range[0],
-      range[1],
+      min,
+      max,
       dtype,
       time
     );
