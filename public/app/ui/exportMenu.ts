@@ -3,11 +3,11 @@ interface SetupExportMenuOptions {
   menu: HTMLElement;
   scrim: HTMLElement;
   onView3D: () => { capture: (callback: (dataUrl: string) => void) => void } | null;
-  onShowNote: (text: string) => void;
+  onExportCroppedVolume: () => void;
 }
 
 export function setupExportMenu(options: SetupExportMenuOptions): void {
-  const { button, menu, scrim, onView3D, onShowNote } = options;
+  const { button, menu, scrim, onView3D, onExportCroppedVolume } = options;
 
   const isOpen = (): boolean => !menu.hidden;
 
@@ -46,7 +46,7 @@ export function setupExportMenu(options: SetupExportMenuOptions): void {
     }
 
     if (action === "cropped-volume") {
-      onShowNote("Cropping the volume to a TIFF export is coming soon.");
+      onExportCroppedVolume();
       return;
     }
 

@@ -23,14 +23,17 @@ import {
 import { TestDataSpec } from "./types";
 import VolumeLoaderContext from "../src/workers/VolumeLoaderContext";
 import { DATARANGE_UINT8, ColorizeFeature } from "../src/types";
+import FileSaver from "../src/FileSaver";
 import {
   CameraMode,
   createHistogramSelection,
+  createLinearHistogramOpacityPoints,
   createInitialState,
   DEFAULT_TEST_DATA,
 } from "./app/state/stateService";
 import { createCropSliceManager } from "./app/crop/cropSliceManager";
 import { createTimeController } from "./app/time/timeController";
+import { exportCroppedVolumeToTiff } from "./app/export/cropExport";
 import { getSourceLoadErrorMessage, SCALE_TOO_LARGE_MESSAGE } from "./app/errors/errorHandling";
 import {
   removeFolderByName as removeAdvancedGuiFolderByName,
@@ -150,6 +153,22 @@ function getCropRegionFromState() {
     zmin: myState.cropZmin,
     zmax: myState.cropZmax,
   };
+}
+
+// exports the enabled channels at the loaded scale level, regardless of view mode
+function exportCroppedVolume() {
+  const channelIndices = myState.channelGui.flatMap((channel, index) => (channel.enabled ? [index] : []));
+  const crop = {
+    x: cropSliceManager.getCropAxisBounds("x"),
+    y: cropSliceManager.getCropAxisBounds("y"),
+    z: cropSliceManager.getCropAxisBounds("z"),
+  };
+  try {
+    const { blob, fileName } = exportCroppedVolumeToTiff(myState.volume, channelIndices, crop);
+    FileSaver.save(blob, fileName);
+  } catch (error) {
+    setUiNote(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function syncCropHandlesFromState() {
@@ -352,8 +371,7 @@ function showChannelUI(volume: Volume) {
             const hist = volume.getHistogram(j) as any;
             const bins = hist?.bins ?? hist?.histogram;
             const maxBin = bins ? bins.length : 0;
-            histogramSelection.minBin = 0;
-            histogramSelection.maxBin = maxBin;
+            histogramSelection.points = createLinearHistogramOpacityPoints(0, maxBin);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -370,8 +388,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = hmin;
-            histogramSelection.maxBin = hmax;
+            histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -388,8 +405,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = b;
-            histogramSelection.maxBin = e;
+            histogramSelection.points = createLinearHistogramOpacityPoints(b, e);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -406,8 +422,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = hmin;
-            histogramSelection.maxBin = hmax;
+            histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -425,8 +440,7 @@ function showChannelUI(volume: Volume) {
           applyColormapToChannel(volume, j);
           view3D.updateLuts(volume);
           if (j === 0) {
-            histogramSelection.minBin = hmin;
-            histogramSelection.maxBin = hmax;
+            histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
             drawHistogramFromVolume(volume, 0);
           }
         };
@@ -666,8 +680,10 @@ function remapDisplayRangesToHistogram(previous: Histogram, next: Histogram) {
     Math.min(next.getNumBins(), Math.max(0, next.findFractionalBinOfValue(previous.getValueFromBinIndex(bin))));
   const remapLut = (lut: number): number => histogramValueToLut(next, lutToHistogramValue(previous, lut));
 
-  histogramSelection.minBin = remapBin(histogramSelection.minBin);
-  histogramSelection.maxBin = remapBin(histogramSelection.maxBin);
+  // keep histogram opacity points on the same data values across timesteps and omezarr levels
+  for (const point of histogramSelection.points) {
+    point.bin = remapBin(point.bin);
+  }
   myState.colormapMin = remapLut(myState.colormapMin);
   myState.colormapMax = remapLut(myState.colormapMax);
 }
@@ -697,8 +713,7 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
     v.setLut(channelIndex, lut);
 
     if (channelIndex === 0) {
-      histogramSelection.minBin = hmin;
-      histogramSelection.maxBin = hmax;
+      histogramSelection.points = createLinearHistogramOpacityPoints(hmin, hmax);
     }
   } else if (rangeChanged && channelIndex === 0) {
     remapDisplayRangesToHistogram(previousHist, hist);
@@ -713,6 +728,7 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
     if (previousHist && channelIndex === 0) {
       // the remapped colormap range is shared by every channel
       applyColormapToVolume(v);
+      applyHistogramLutFromBins(0);
     } else {
       applyColormapToChannel(v, channelIndex);
       view3D.updateLuts(v);
@@ -1157,8 +1173,7 @@ function main() {
 
   histogramController = createHistogramController({
     canvas: ui.histogramCanvas,
-    minTag: ui.histogramMinTag,
-    maxTag: ui.histogramMaxTag,
+    pointTag: ui.histogramPointTag,
     selection: histogramSelection,
     getVolume: () => myState.volume,
     getView3D: () => view3D,
@@ -1231,7 +1246,7 @@ function main() {
       menu: ui.exportMenu,
       scrim: ui.menuScrim,
       onView3D: () => view3D,
-      onShowNote: setUiNote,
+      onExportCroppedVolume: exportCroppedVolume,
     });
   }
 
