@@ -4,10 +4,11 @@ interface SetupExportMenuOptions {
   scrim: HTMLElement;
   onView3D: () => { capture: (callback: (dataUrl: string) => void) => void } | null;
   onShowNote: (text: string) => void;
+  getViewLink: () => string;
 }
 
 export function setupExportMenu(options: SetupExportMenuOptions): void {
-  const { button, menu, scrim, onView3D, onShowNote } = options;
+  const { button, menu, scrim, onView3D, onShowNote, getViewLink } = options;
 
   const isOpen = (): boolean => !menu.hidden;
 
@@ -51,7 +52,7 @@ export function setupExportMenu(options: SetupExportMenuOptions): void {
     }
 
     if (action === "copy-view-link") {
-      void navigator.clipboard?.writeText(window.location.href);
+      void navigator.clipboard?.writeText(getViewLink());
     }
   };
 

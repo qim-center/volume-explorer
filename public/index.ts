@@ -24,10 +24,14 @@ import VolumeLoaderContext from "../src/workers/VolumeLoaderContext";
 import { DATARANGE_UINT8, ColorizeFeature } from "../src/types";
 import {
   CameraMode,
+  CROP_AXES,
+  CropAxis,
+  cropAxisStateKeys,
   createHistogramSelection,
   createInitialState,
   DEFAULT_TEST_DATA,
 } from "./app/state/stateService";
+import { buildViewLink, Range, readUrlParams, ScaleParam, updateAddressBar, ViewParams } from "./app/state/urlState";
 import { createCropSliceManager } from "./app/crop/cropSliceManager";
 import { getSourceLoadErrorMessage, SCALE_TOO_LARGE_MESSAGE } from "./app/errors/errorHandling";
 import {
@@ -45,7 +49,7 @@ import { setupViewMode } from "./app/ui/viewMode";
 import { createHistogramController } from "./app/histogram/histogramController";
 import { createColormapController } from "./app/colormap/colormapController";
 import { createLoaderOrchestration } from "./app/loaders/loaderOrchestration";
-import { rgb01ToHex } from "./app/utils/color";
+import { hexToRgb01, rgb01ToHex } from "./app/utils/color";
 import { densitySliderToView3D, gammaSliderToImageValues, histogramBinToLut } from "./app/utils/math";
 import { inferVolumeFileFormat } from "./app/utils/source";
 
@@ -56,13 +60,16 @@ const PREFETCH_DISTANCE: [number, number, number, number] = [5, 5, 5, 5];
 const MAX_PREFETCH_CHUNKS = 25;
 const PLAYBACK_INTERVAL = 80;
 
+// histogram percentiles of the automatic transparency range set when data arrives
+const AUTO_LUT_MIN_PERCENTILE = 0.5;
+const AUTO_LUT_MAX_PERCENTILE = 0.983;
+
 const TEST_DATA = DEFAULT_TEST_DATA as Record<string, TestDataSpec>;
 
-function getMaxActiveRequestsFromUrl(): number {
-  const raw = new URLSearchParams(window.location.search).get("maxActiveRequests");
-  const value = raw ? Number(raw) : NaN;
-  return Number.isInteger(value) && value > 0 ? value : DEFAULT_CONCURRENCY_LIMIT;
-}
+// URL parameters are parsed at start
+const urlParams = readUrlParams();
+// view settings from a shared link, applied at start
+let pendingView: ViewParams | null = Object.keys(urlParams.view).length ? urlParams.view : null;
 
 let view3D: View3d;
 
@@ -108,7 +115,7 @@ function setUiInfo(message?: string) {
 
 const myState = createInitialState();
 
-const MAX_ACTIVE_REQUESTS = getMaxActiveRequestsFromUrl();
+const MAX_ACTIVE_REQUESTS = urlParams.launch.maxActiveRequests ?? DEFAULT_CONCURRENCY_LIMIT;
 
 const loaderContext = new VolumeLoaderContext(CACHE_MAX_SIZE, MAX_ACTIVE_REQUESTS, PREFETCH_CONCURRENCY_LIMIT);
 
@@ -670,11 +677,9 @@ function loadImageData(jsonData: ImageInfo, volumeData: Uint8Array[]) {
 
 function onChannelDataArrived(v: Volume, channelIndex: number) {
   const currentVol = v; // myState.volume;
-  const LUT_MIN_PERCENTILE = 0.5;
-  const LUT_MAX_PERCENTILE = 0.983;
   const hist = v.getHistogram(channelIndex);
-  const hmin = hist.findBinOfPercentile(LUT_MIN_PERCENTILE);
-  const hmax = hist.findBinOfPercentile(LUT_MAX_PERCENTILE);
+  const hmin = hist.findBinOfPercentile(AUTO_LUT_MIN_PERCENTILE);
+  const hmax = hist.findBinOfPercentile(AUTO_LUT_MAX_PERCENTILE);
   const lut = new Lut().createFromMinMax(
     scaleHistogramBinToLut(v, channelIndex, hmin),
     scaleHistogramBinToLut(v, channelIndex, hmax)
@@ -707,6 +712,10 @@ function onChannelDataArrived(v: Volume, channelIndex: number) {
   updateSliceSelectorUI();
   applyCropRegionFromState();
 
+  if (channelIndex === 0) {
+    restoreViewOnFirstData(v);
+  }
+
   view3D.redraw();
 }
 
@@ -725,6 +734,7 @@ function onVolumeCreated(name: string, volume: Volume) {
   view3D.updateDensity(myState.volume, densitySliderToView3D(myState.density));
   view3D.updateExposure(myState.exposure);
   view3D.setBoundingBoxColor(myState.volume, myState.boundingBoxColor);
+  view3D.setShowBoundingBox(myState.volume, myState.showBoundingBox);
 
   // apply a volume transform from an external source:
   if (myJson.transform) {
@@ -745,6 +755,7 @@ function onVolumeCreated(name: string, volume: Volume) {
   updateScenesUI();
   updateZSliceUI(myState.volume);
   resetSliceIndicesForVolume(myState.volume);
+  restoreViewOnVolumeCreated(myState.volume);
   syncCropInputsFromState();
   applyCropRegionFromState();
   showChannelUI(myState.volume);
@@ -861,14 +872,128 @@ function syncColorInputsToState() {
   document.body.style.background = hexValue;
 }
 
+const DEFAULT_STATE = createInitialState();
+let setViewMode: ((mode: CameraMode) => void) | null = null;
+
+const unlessDefault = <T>(value: T, defaultValue: T): T | undefined => (value === defaultValue ? undefined : value);
+
+// links use full-resolution voxel indices
+const rescaleIndex = (index: number, fromSize: number, toSize: number): number =>
+  fromSize > 1 ? Math.round((index / (fromSize - 1)) * (toSize - 1)) : 0;
+
+function captureViewParams(): ViewParams {
+  const volume = myState.volume;
+  const { volumeSize, originalSize } = volume.imageInfo;
+  const mode = currentCameraMode;
+  const slices = cropSliceManager.getSliceIndices();
+  const sliceAxes: CropAxis[] = mode === "ORTHO" ? CROP_AXES : mode === "3D" ? [] : [mode.toLowerCase() as CropAxis];
+  const crop = CROP_AXES.map((axis): Range => {
+    const { min, max } = cropAxisStateKeys[axis];
+    return [Math.floor(myState[min] * originalSize[axis]), Math.ceil(myState[max] * originalSize[axis])];
+  });
+  const isFullCrop = CROP_AXES.every((axis, i) => crop[i][0] === 0 && crop[i][1] === originalSize[axis]);
+  const cam = view3D.getCameraState();
+  const isDefaultCmRange =
+    myState.colormapMin === DEFAULT_STATE.colormapMin && myState.colormapMax === DEFAULT_STATE.colormapMax;
+
+  const view: ViewParams = {
+    view: unlessDefault(mode, "3D"),
+    slice: sliceAxes.length
+      ? sliceAxes.map((axis) => rescaleIndex(slices[axis], volumeSize[axis], originalSize[axis]))
+      : undefined,
+    crop: isFullCrop ? undefined : crop,
+    cam: [...cam.position, ...cam.target, ...cam.up, ...(cam.orthoScale !== undefined ? [cam.orthoScale] : [])],
+    colormap: unlessDefault(myState.colormap, DEFAULT_STATE.colormap),
+    invert: unlessDefault(myState.colormapInverted, DEFAULT_STATE.colormapInverted),
+    cmrange: isDefaultCmRange ? undefined : [myState.colormapMin, myState.colormapMax],
+    cmlock: unlessDefault(myState.colormapRangeMapped, DEFAULT_STATE.colormapRangeMapped),
+    opacity: unlessDefault(Math.round(myState.density), DEFAULT_STATE.density),
+    grid: unlessDefault(myState.showBoundingBox, DEFAULT_STATE.showBoundingBox),
+    bg: unlessDefault(rgb01ToHex(myState.backgroundColor), rgb01ToHex(DEFAULT_STATE.backgroundColor)),
+  };
+
+  // transparency is only written when it differs from the automatic range
+  if (volume.getChannel(0)?.loaded) {
+    const hist = volume.getHistogram(0);
+    const { minBin, maxBin } = histogramSelection;
+    if (
+      minBin !== hist.findBinOfPercentile(AUTO_LUT_MIN_PERCENTILE) ||
+      maxBin !== hist.findBinOfPercentile(AUTO_LUT_MAX_PERCENTILE)
+    ) {
+      view.transparency = [hist.getValueFromBinIndex(minBin), hist.getValueFromBinIndex(maxBin)];
+    }
+  }
+  return view;
+}
+
+function applyStateFromView(view: ViewParams) {
+  if (view.colormap && colorizercolormaps[view.colormap]) myState.colormap = view.colormap;
+  if (view.invert !== undefined) myState.colormapInverted = view.invert;
+  if (view.cmrange) [myState.colormapMin, myState.colormapMax] = view.cmrange;
+  if (view.cmlock !== undefined) myState.colormapRangeMapped = view.cmlock;
+  if (view.opacity !== undefined) myState.density = view.opacity;
+  if (view.grid !== undefined) myState.showBoundingBox = view.grid;
+  if (view.bg) myState.backgroundColor = hexToRgb01(view.bg, myState.backgroundColor);
+}
+
+function restoreViewOnVolumeCreated(volume: Volume) {
+  const crop = pendingView?.crop;
+  if (!crop) {
+    return;
+  }
+  const size = volume.imageInfo.originalSize;
+  CROP_AXES.forEach((axis, i) => {
+    myState[cropAxisStateKeys[axis].min] = Math.min(1, crop[i][0] / size[axis]);
+    myState[cropAxisStateKeys[axis].max] = Math.min(1, crop[i][1] / size[axis]);
+  });
+}
+
+function restoreViewOnFirstData(volume: Volume) {
+  const view = pendingView;
+  pendingView = null;
+  if (!view) {
+    return;
+  }
+
+  if (view.view) {
+    setViewMode?.(view.view);
+  }
+
+  const slice = view.slice;
+  if (slice) {
+    const { volumeSize, originalSize } = volume.imageInfo;
+    const mode = currentCameraMode;
+    const isSingleSlice = mode === "X" || mode === "Y" || mode === "Z";
+    const axes: CropAxis[] = slice.length === 3 ? CROP_AXES : isSingleSlice ? [mode.toLowerCase() as CropAxis] : [];
+    const indices: Partial<Record<CropAxis, number>> = {};
+    axes.forEach((axis, i) => {
+      indices[axis] = rescaleIndex(slice[i], originalSize[axis], volumeSize[axis]);
+    });
+    cropSliceManager.setSliceIndices(indices);
+  }
+
+  if (view.transparency) {
+    const hist = volume.getHistogram(0);
+    const toBin = (value: number) => Math.max(0, Math.min(hist.getNumBins(), hist.findFractionalBinOfValue(value)));
+    histogramSelection.minBin = toBin(view.transparency[0]);
+    histogramSelection.maxBin = toBin(view.transparency[1]);
+    histogramController?.applyHistogramLutFromBins(0);
+  }
+
+  if (view.cam) {
+    const c = view.cam;
+    view3D.setCameraState({
+      position: [c[0], c[1], c[2]],
+      target: [c[3], c[4], c[5]],
+      up: [c[6], c[7], c[8]],
+      orthoScale: c[9],
+    });
+  }
+}
+
 function main() {
   const ui = getAppUiElements();
-  const urlParams = new URLSearchParams(window.location.search);
-  const turntableParam = urlParams.get("turntable")?.trim().toLowerCase();
-  const colormapParam = urlParams.get("colormap")?.trim();
-  if (colormapParam && colorizercolormaps[colormapParam]) {
-    myState.colormap = colormapParam;
-  }
+  applyStateFromView(urlParams.view);
 
   const el = ui.viewerPanel;
   if (!el) {
@@ -917,7 +1042,7 @@ function main() {
     });
   }
 
-  if (turntableParam === "true") {
+  if (urlParams.launch.turntable) {
     const appLayout = document.querySelector(".app");
     view3D.setAutoRotate(true);
     appLayout?.addEventListener("mouseenter", () => {
@@ -932,6 +1057,7 @@ function main() {
 
   // levels that don't fit are disabled in the dropdown, so any level picked here can be loaded
   const applyScaleLevel = async (level?: number): Promise<void> => {
+    updateAddressBar({ scale: level });
     await myState.volume.updateRequiredData({ useExplicitLevel: level !== undefined, multiscaleLevel: level });
   };
 
@@ -951,6 +1077,7 @@ function main() {
     if (error instanceof Error && error.message === SCALE_TOO_LARGE_MESSAGE) {
       setScaleError(SCALE_TOO_LARGE_MESSAGE);
       scaleSelectApi?.setSelection("auto");
+      updateAddressBar({ scale: undefined });
     }
   });
 
@@ -961,34 +1088,14 @@ function main() {
 
   const setSourceError = (warning?: string) => setUiNote(warning);
 
-  const bindSource = (nextSource?: string): string => {
-    const params = new URLSearchParams(window.location.search);
-    const source = (nextSource ?? params.get("src") ?? "").trim();
-
-    if (source) {
-      params.set("src", source);
-    } else {
-      params.delete("src");
-    }
-    window.history.replaceState(null, "", `?${params.toString()}`);
-
-    if (sourceUrlInput) {
-      sourceUrlInput.value = source;
-    }
-
-    return source;
-  };
-
   const clearView = () => {
     view3D.removeAllVolumes();
     view3D.redraw();
   };
 
-  const loadFromCurrentSource = async (isInitialLoad = false) => {
-    let source = bindSource();
-
-    if (isInitialLoad && !source) {
-      source = bindSource(defaultSource);
+  const loadSource = async (source: string, scale?: ScaleParam) => {
+    if (sourceUrlInput) {
+      sourceUrlInput.value = source;
     }
 
     if (!source) {
@@ -1010,7 +1117,8 @@ function main() {
       setScaleError();
       setSourceError();
       setVolumeLoading(true);
-      await loadTestData("url", { type, url: source });
+      await loadTestData("url", { type, url: source }, scale);
+      updateAddressBar({ src: source, scale: myState.volume.loadSpecRequired.useExplicitLevel ? scale : undefined });
     } catch (error) {
       console.error(error);
       setSourceError(getSourceLoadErrorMessage(error));
@@ -1032,17 +1140,15 @@ function main() {
   });
 
   sourceUrlInput?.addEventListener("input", () => {
-    bindSource(sourceUrlInput.value);
     setSourceError();
-  });
-  window.addEventListener("popstate", () => {
-    bindSource();
   });
 
   const triggerSourceLoad = async () => {
-    const source = bindSource(sourceUrlInput?.value);
+    const source = sourceUrlInput?.value.trim() ?? "";
     if (!source) return;
-    await loadFromCurrentSource();
+    const current = readUrlParams().data;
+    pendingView = null;
+    await loadSource(source, source === current.src ? current.scale : undefined);
   };
 
   sourceForm?.addEventListener("submit", async (event) => {
@@ -1185,7 +1291,7 @@ function main() {
   histogramController.setupInteractions();
 
   if (ui.viewSegmented) {
-    setupViewMode({
+    setViewMode = setupViewMode({
       segmented: ui.viewSegmented,
       view3D,
       onModeChange: (mode) => {
@@ -1242,10 +1348,15 @@ function main() {
       scrim: ui.menuScrim,
       onView3D: () => view3D,
       onShowNote: setUiNote,
+      getViewLink: () => buildViewLink(readUrlParams().data, captureViewParams()),
     });
   }
 
-  void loadFromCurrentSource(true);
+  if (urlParams.invalid.length) {
+    setUiInfo(`Some settings were ignored because their values are invalid: ${urlParams.invalid.join(", ")}.`);
+  }
+
+  void loadSource(urlParams.data.src ?? defaultSource, urlParams.data.scale);
 }
 
 document.body.onload = () => {

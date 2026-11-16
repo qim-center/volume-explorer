@@ -188,20 +188,6 @@ export function createColormapController(options: ColormapControllerOptions) {
     }
   };
 
-  const setColormapInUrl = (colormap: string): void => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (colormap) {
-        params.set("colormap", colormap);
-      } else {
-        params.delete("colormap");
-      }
-      window.history.replaceState(null, "", `?${params.toString()}`);
-    } catch (e) {
-      console.log(e);
-    }
-  };
-
   const getOrderedColormapStops = (colormapName: string): string[] | null => {
     const colormap = colorizercolormaps[colormapName];
     if (!colormap || !colormap.stops) {
@@ -282,7 +268,6 @@ export function createColormapController(options: ColormapControllerOptions) {
         onColormapChange?.();
         view3D.setChannelColorizeFeature(volume, state.colorizeChannel, getStateColorizeFeature());
         view3D.redraw();
-        setColormapInUrl(colormapName);
       });
       picker.appendChild(option);
     }
@@ -452,7 +437,6 @@ export function createColormapController(options: ColormapControllerOptions) {
     applyColormapToVolume,
     getChannelColormapRange,
     getStateColorizeFeature,
-    setColormapInUrl,
     getColormapStops: (): string[] | null => getOrderedColormapStops(state.colormap),
     setupColorizeControls,
     setupColormapRangeControls,

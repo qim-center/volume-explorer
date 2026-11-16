@@ -315,6 +315,22 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
     updateSliceSelectorUI();
   }
 
+  function getSliceIndices(): Record<CropAxis, number> {
+    return { ...sliceIndexByAxis };
+  }
+
+  function setSliceIndices(indices: Partial<Record<CropAxis, number>>) {
+    for (const axis of CROP_AXES) {
+      const index = indices[axis];
+      if (index !== undefined) {
+        sliceIndexByAxis[axis] = clampSliceIndex(axis, index);
+        setSliceIndexForAxis(axis, sliceIndexByAxis[axis]);
+      }
+    }
+    updateSliceSelectorUI();
+    applyCropRegionFromState();
+  }
+
   function resetSliceIndicesForVolume(volume: Volume) {
     for (const axis of CROP_AXES) {
       const axisCount = Math.max(1, Math.floor(volume.imageInfo.volumeSize[axis]));
@@ -567,9 +583,11 @@ export function createCropSliceManager(options: CropSliceManagerOptions) {
   return {
     applyCropRegionFromState,
     getEffectiveAxisLoadBounds,
+    getSliceIndices,
     remapSliceIndicesForRescaledVolume,
     resetSliceIndicesForVolume,
     setActiveSliceMode,
+    setSliceIndices,
     setupCropControls,
     setupSliceSelectorControls,
     syncCropInputsFromState,
