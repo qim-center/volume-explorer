@@ -12,6 +12,7 @@ import { RawArrayLoaderOptions } from "../../../src/loaders/RawArrayLoader";
 import VolumeLoaderContext from "../../../src/workers/VolumeLoaderContext";
 import { type NumberType } from "../../../src/types";
 import { State, TestDataSpec } from "../../types";
+import { ScaleParam } from "../state/urlState";
 
 interface LoaderOrchestrationOptions {
   state: State;
@@ -121,22 +122,13 @@ export function createLoaderOrchestration(options: LoaderOrchestrationOptions) {
     volume.load().catch(() => undefined);
   };
 
-  const loadTestData = async (name: string, testdata: TestDataSpec) => {
+  const loadTestData = async (name: string, testdata: TestDataSpec, scale?: ScaleParam) => {
     state.loader = await createLoader(testdata);
 
     const loadSpec = new LoadSpec();
-    if (testdata.type === VolumeFileFormat.ZARR) {
-      const scaleParam = new URLSearchParams(window.location.search).get("scale")?.trim().toLowerCase();
-      if (scaleParam === "last") {
-        loadSpec.useExplicitLevel = true;
-        loadSpec.multiscaleLevel = Number.MAX_SAFE_INTEGER;
-      } else {
-        const level = Number(scaleParam);
-        if (scaleParam && Number.isInteger(level) && level >= 0) {
-          loadSpec.useExplicitLevel = true;
-          loadSpec.multiscaleLevel = level;
-        }
-      }
+    if (testdata.type === VolumeFileFormat.ZARR && scale !== undefined) {
+      loadSpec.useExplicitLevel = true;
+      loadSpec.multiscaleLevel = scale === "last" ? Number.MAX_SAFE_INTEGER : scale;
     }
 
     state.totalFrames = testdata.times;

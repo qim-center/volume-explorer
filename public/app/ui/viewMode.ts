@@ -9,7 +9,7 @@ interface SetupViewModeOptions {
   onModeChange: (mode: CameraMode) => void;
 }
 
-export function setupViewMode(options: SetupViewModeOptions): void {
+export function setupViewMode(options: SetupViewModeOptions): (mode: CameraMode) => void {
   const { segmented, view3D, onModeChange } = options;
   const buttons = Array.from(segmented.querySelectorAll<HTMLButtonElement>(".segmented__item"));
   const indexByMode = new Map<CameraMode, number>();
@@ -36,6 +36,8 @@ export function setupViewMode(options: SetupViewModeOptions): void {
       setMode(button.dataset.mode as CameraMode);
     });
   }
+
+  return setMode;
 }
 
 export function getSegmentedIndex(mode: CameraMode): number {

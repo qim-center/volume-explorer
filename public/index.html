@@ -5,7 +5,8 @@
     <title>Qim Volume Explorer</title>
     <script>
       (function () {
-        const hidden = new URLSearchParams(window.location.search).get("hidden")?.trim().toLowerCase() === "true";
+        const raw = new URLSearchParams(window.location.search).get("hidden");
+        const hidden = raw === "true" || raw === "1";
         if (hidden) {
           document.documentElement.classList.add("ui-hidden");
         }

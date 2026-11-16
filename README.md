@@ -51,21 +51,26 @@ The explorer opens with a OME-Zarr public dataset by default. Paste any dataset 
 
 ### URL parameters
 
-The app URL accepts a few query parameters, which are preserved when sharing a view link:
-
-| Parameter | Description |
+| Parameter | Value |
 | --- | --- |
-| `src` | Dataset URL to load on start. |
-| `colormap` | Initial colormap name (e.g. `viridis`, `plasma`, `inferno`, `magma`, `cividis`, `grayscale`). |
-| `hidden` | `true` hides the UI panels, for embedded use. |
-| `turntable` | `true` enables auto-rotation of the camera (pauses while hovering). |
-| `maxActiveRequests` | Number of concurrent data fetches (useful on large datasets). |
+|`src` | Dataset source URL |
+| `scale` | Ome-ZARR Multiscale level |
+| `view` | `3d`, `x`, `y`, `z` or `ortho` |
+| `slice` | Slice index, or `x,y,z` in the `ortho` view |
+| `crop` | `x0:x1,y0:y1,z0:z1` |
+| `cam` | Camera position |
+| `colormap` | Colormap name |
+| `invert` | `1` inverts the colormap |
+| `cmrange` | Colormap range `min:max`, 0–255 |
+| `cmlock` | `1` locks the colormap range to the transparency range |
+| `transparency` | Histogram range `min:max`, as intensity values. |
+| `opacity` | 0–100 |
+| `grid` | `1` shows the grid |
+| `bg` | Background color as hex, e.g. `000000` |
+| `hidden` | `true` hides the UI |
+| `turntable` | `true` rotates the camera |
+| `maxActiveRequests` | Number of concurrent data fetches |
 
-Example:
-
-```
-https://viz.qim.dk/?src=https%3A%2F%2Fpublic.qim.dk%2Fescargot%2Fescargot.zarr%2F
-```
 
 ### Advanced
 
