@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Fails the build if the bundled app references an external host (CDN)
 import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const appDir = new URL("../dist/app/", import.meta.url).pathname;
+const appDir = fileURLToPath(new URL("../dist/app/", import.meta.url));
 
 const externalAsset =
   /(?:<(?:link|script|img|source|iframe)\b[^>]*\b(?:href|src)\s*=\s*["']?|url\(\s*["']?|@import\s+["'])((?:https?:)?\/\/[^"'\s)>]+)/gi;
