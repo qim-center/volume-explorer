@@ -35,6 +35,7 @@ import Atlas2DSlice from "./Atlas2DSlice.js";
 import Ortho from "./Ortho.js";
 import { VolumeRenderSettings, SettingsFlags, Axis } from "./VolumeRenderSettings.js";
 import ContourPass from "./ContourPass.js";
+import QimPathTracedVolume from "./QimPathTracedVolume.js";
 
 type ColorArray = [number, number, number];
 type ColorObject = { r: number; g: number; b: number };
@@ -970,7 +971,7 @@ export default class VolumeDrawable {
     // create new
     switch (newRenderMode) {
       case RenderMode.PATHTRACE:
-        this.volumeRendering = new PathTracedVolume(this.volume, this.settings);
+        this.volumeRendering = new QimPathTracedVolume(this.volume, this.settings);
         this.volume.updateRequiredData({ subregion: new Box3(new Vector3(0, 0, 0), new Vector3(1, 1, 1)) });
         this.volumeRendering.setRenderUpdateListener(this.renderUpdateListener);
         break;

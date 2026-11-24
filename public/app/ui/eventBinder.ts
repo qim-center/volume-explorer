@@ -2,6 +2,7 @@ import { View3d } from "../../../src";
 import { State } from "../../types";
 import { densitySliderToView3D } from "../utils/math";
 import { hexToRgb01, rgb01ToHex } from "../utils/color";
+import { RenderMode } from "../../../src/types";
 
 interface BindPrimaryViewControlsOptions {
   state: State;
@@ -68,6 +69,20 @@ export function bindPrimaryViewControls(options: BindPrimaryViewControlsOptions)
     });
     backgroundPicker.addEventListener("change", () => {
       applyBackgroundColor(backgroundPicker.value);
+    });
+  }
+
+  const usePathTracingToggle = document.getElementById("usePathTracing") as HTMLButtonElement | null;
+  if (usePathTracingToggle) {
+    const syncToggle = (): void => {
+      usePathTracingToggle.setAttribute("aria-checked", String(state.isPT));
+    };
+    syncToggle();
+
+    usePathTracingToggle.addEventListener("click", () => {
+      state.isPT = !state.isPT;
+      syncToggle();
+      view3D.setVolumeRenderMode(state.isPT ? RenderMode.PATHTRACE : RenderMode.RAYMARCH);
     });
   }
 
