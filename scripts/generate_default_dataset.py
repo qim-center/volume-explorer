@@ -17,6 +17,12 @@ Current scene: twisted rope
     mid-way and loosens again, so the first frame and the frame "after"
     the last one are identical and the animation loops seamlessly.
 
+    Note on sizing: qim3d's rope packs its threads into concentric rings
+    whose size is determined by the thread parameters, so the rope only
+    occupies a small central region of its bounding box. The script
+    therefore auto-scales the thread thickness (``rope_thread_layout``)
+    so the rope spans ``SCENE_OBJECT_SIZE * SCENE_FILL_RATIO``.
+
 Resulting layout (multi-resolution pyramid, 64^3 chunks everywhere):
 
     default_omezarr.zarr
@@ -92,11 +98,17 @@ DOWNSAMPLE_RATE = 2   # pyramid factor between levels (2 = half size per level)
 # scene parameters grouped here.
 #
 # The rope runs along Z across the full cube length; its (D x D)
-# cross-section is centered in the YX plane.
-SCENE_OBJECT_SIZE = 512     # rope cross-section size
-SCENE_NUM_THREADS = 24      # number of threads in the rope
-SCENE_THREAD_THICKNESS = 20 # thickness of an individual thread (voxels)
-SCENE_THREAD_SPACING = 0.8  # spacing between threads (ratio of thread thickness)
+# cross-section is centered in the YX plane and spans
+# SCENE_OBJECT_SIZE * SCENE_FILL_RATIO (see rope_thread_layout).
+SCENE_OBJECT_SIZE = 512     # rope bounding-box size (YX cross-section)
+SCENE_FILL_RATIO = 0.9      # fraction of the bounding box the rope should
+                            # span (the thread thickness is auto-scaled so
+                            # the rope actually fills this much of the box)
+SCENE_NUM_THREADS = 100     # number of threads in the rope (more threads =>
+                            # more rings => the rope can fill the box better)
+SCENE_THREAD_THICKNESS = 20 # base thread thickness (voxels); auto-scaled
+                            # per frame to achieve SCENE_FILL_RATIO
+SCENE_THREAD_SPACING = 1.2  # spacing between rings (ratio of thread thickness)
 SCENE_COMPRESSION_FACTOR = 0.0  # thread compression at overlaps (0-1)
 SCENE_NOISE_SCALE = 0.03    # thread surface texture
 SCENE_SEED = 42             # random seed (same seed on every frame => no
@@ -108,8 +120,10 @@ SCENE_SEED = 42             # random seed (same seed on every frame => no
 # One full cosine period over the whole frame range: the twist starts loose,
 # tightens to TWIST_MAX mid-way, loosens again and returns to the starting
 # state => the animation loops seamlessly.
-TWIST_MIN = 0.5   # loosest twist (minimum twist_rate)
-TWIST_MAX = 3.0   # tightest twist (maximum twist_rate)
+# Keep the range narrow: with only a few dozen frames, a large twist
+# difference between consecutive frames makes the animation look jumpy.
+TWIST_MIN = 1.5   # loosest twist (minimum twist_rate)
+TWIST_MAX = 2.0   # tightest twist (maximum twist_rate)
 
 # --- Optional background noise (qim3d.generate.background) ----------------------
 # Maximum noise amplitude (0-255); 0 disables the background noise entirely.
@@ -177,11 +191,62 @@ def coarsen_cube(volume: np.ndarray, factor: int = 2) -> np.ndarray:
     return reshaped.mean(axis=(1, 3, 5)).astype(volume.dtype)
 
 
+def rope_thread_layout(
+    num_threads: int,
+    base_thickness: int,
+    spacing: float,
+    box_size: int,
+    fill_ratio: float,
+) -> tuple[int, float, int]:
+    """Solve the thread thickness so the rope fills its bounding box.
+
+    Mirrors the ring packing of ``qim3d.generate.rope``:
+
+    - ring 0 holds 1 thread, ring ``i`` holds ``int(2*pi*i)`` threads
+      (so the number of rings needed depends only on ``num_threads``)
+    - only ``int((box - t) / (2*t*spacing))`` rings fit inside the box, so
+      threads that would land on later rings are silently dropped
+
+    ``base_thickness`` is scaled (up or down) until the rope spans
+    ``fill_ratio * box_size`` — unless the box itself is the limiting
+    factor, in which case the achievable fill is lower (the caller logs
+    this). Returns ``(effective_thickness, expected_diameter,
+    threads_placed)``.
+    """
+    # Index of the last ring needed to place all threads.
+    placed, n = 0, 0
+    while placed < num_threads:
+        placed += 1 if n == 0 else min(int(2 * np.pi * n), num_threads - placed)
+        n += 1
+    n -= 1  # -> last occupied ring index
+
+    # Thickness that hits the fill target, and thickness that still fits
+    # the box (all rings + one thread of margin per side).
+    t_fill = fill_ratio * box_size / (2 * n * spacing + 1)
+    t_box = box_size / (2 * (n + 1) * spacing + 1)
+    t = int(min(t_fill, t_box))
+
+    # qim3d's effective layout with that thickness.
+    ring_spacing = t * spacing
+    num_rings = max(1, int((box_size - t) / (2 * ring_spacing)))
+    last_ring = n
+    placed = 0
+    for i in range(num_rings):
+        placed += 1 if i == 0 else min(int(2 * np.pi * i), num_threads - placed)
+        if placed >= num_threads:
+            last_ring = i
+            break
+    last_ring = min(last_ring, num_rings - 1)
+    diameter = 2 * (last_ring * ring_spacing + t / 2)
+    return t, diameter, placed
+
+
 def make_frame(
     t: int,
     n_frames: int,
     cube_size: int,
     object_size: int,
+    thread_thickness: int,
 ) -> np.ndarray:
     """Generate one (Z, Y, X) frame of the current scene: object centered
     in a full cube."""
@@ -191,7 +256,7 @@ def make_frame(
     rope_vol = rope(
         shape=(cube_size, object_size, object_size),
         num_threads=SCENE_NUM_THREADS,
-        thread_thickness=SCENE_THREAD_THICKNESS,
+        thread_thickness=thread_thickness,
         twist_rate=twist,
         compression_factor=SCENE_COMPRESSION_FACTOR,
         thread_spacing=SCENE_THREAD_SPACING,
@@ -290,10 +355,10 @@ def main() -> None:
         )
     if not 0 <= SCENE_COMPRESSION_FACTOR <= 1:
         raise ValueError("SCENE_COMPRESSION_FACTOR must be in [0, 1].")
-    if not SCENE_THREAD_THICKNESS < SCENE_OBJECT_SIZE // 2:
-        raise ValueError(
-            "SCENE_THREAD_THICKNESS must be smaller than SCENE_OBJECT_SIZE / 2."
-        )
+    if SCENE_THREAD_THICKNESS <= 0:
+        raise ValueError("SCENE_THREAD_THICKNESS must be positive.")
+    if not 0 < SCENE_FILL_RATIO <= 1:
+        raise ValueError("SCENE_FILL_RATIO must be in (0, 1].")
     if not (SCENE_OBJECT_SIZE < CUBE_SIZE):
         raise ValueError("SCENE_OBJECT_SIZE must be smaller than CUBE_SIZE.")
     if CUBE_SIZE % CHUNK_SIZE != 0:
@@ -306,6 +371,37 @@ def main() -> None:
         f"Pyramid levels (Z): {sizes} -> {len(sizes)} levels, "
         f"{N_FRAMES} frames, chunk size {CHUNK_SIZE}."
     )
+
+    # ---- scene layout -----------------------------------------------------------
+    # qim3d's rope only spans a small central region of its bounding box
+    # (threads are packed in concentric rings sized by the thread
+    # parameters), so the thread thickness is auto-scaled to make the rope
+    # actually fill the box.
+    thread_thickness, rope_diameter, threads_placed = rope_thread_layout(
+        SCENE_NUM_THREADS,
+        SCENE_THREAD_THICKNESS,
+        SCENE_THREAD_SPACING,
+        SCENE_OBJECT_SIZE,
+        SCENE_FILL_RATIO,
+    )
+    scale = thread_thickness / SCENE_THREAD_THICKNESS
+    logging.info(
+        f"Rope layout: {SCENE_NUM_THREADS} threads, thickness "
+        f"{SCENE_THREAD_THICKNESS} -> {thread_thickness} (auto-scaled x{scale:.2f}) "
+        f"-> rope spans ~{rope_diameter:.0f} px "
+        f"({rope_diameter / SCENE_OBJECT_SIZE:.0%} of the "
+        f"{SCENE_OBJECT_SIZE} px bounding box)"
+    )
+    if threads_placed < SCENE_NUM_THREADS:
+        logging.warning(
+            f"Only {threads_placed}/{SCENE_NUM_THREADS} threads fit in the "
+            f"bounding box; qim3d will silently drop the rest."
+        )
+    if rope_diameter / SCENE_OBJECT_SIZE < SCENE_FILL_RATIO - 0.01:
+        logging.info(
+            "Note: the requested fill ratio is limited by the thread count; "
+            "increase SCENE_NUM_THREADS for a fuller rope."
+        )
 
     # ---- prepare the output store ---------------------------------------------
     out_dir = os.path.dirname(os.path.abspath(OUTPUT_PATH))
@@ -329,7 +425,7 @@ def main() -> None:
     for t in range(N_FRAMES):
         t0 = time.time()
 
-        frame = make_frame(t, N_FRAMES, CUBE_SIZE, SCENE_OBJECT_SIZE)
+        frame = make_frame(t, N_FRAMES, CUBE_SIZE, SCENE_OBJECT_SIZE, thread_thickness)
 
         # Multi-resolution pyramid for this frame (level 0 = full resolution)
         pyramid = [frame]
