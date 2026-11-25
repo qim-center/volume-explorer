@@ -19,6 +19,7 @@ import {
   WebGLRenderer,
   RedFormat,
   Vector2,
+  NoBlending,
 } from "three";
 
 import { renderToBufferVertShader, copyImageFragShader } from "./constants/basicShaders.js";
@@ -97,10 +98,11 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
         generateMipmaps: false,
       }));
     } 
-
-    // initialize texture.
     this.renderToBuffer = new RenderToBuffer(qimPathTraceFragmentShaderSrc, this.uniforms);
+    this.renderToBuffer.material.blending = NoBlending; // no effect when transparent = false, but just to be clear
+
     this.postProcessRenderToBuffer= new RenderToBuffer(qimPostProcessFragmentShaderSrc, this.postProcessUniforms);
+    this.postProcessRenderToBuffer.material.transparent = true;
 
     // Update settings
     this.updateSettings(settings);
@@ -151,7 +153,6 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     }
 
     if (dirtyFlags & SettingsFlags.MATERIAL) {
-      
       this.updateMaterial();
     }
 
@@ -182,7 +183,7 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
       // this.updateVolumeData4();
     }
     if (dirtyFlags & SettingsFlags.VIEW) {
-      // this.pathTracingUniforms.gCamera.value.mIsOrtho = this.settings.isOrtho ? 1 : 0;
+
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {
@@ -217,15 +218,17 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
       this.resetProgress();
     }
 
-    this.sampleCount += 1;
-    this.renderUpdateListener?.(this.sampleCount);
-
     // force the camera to update its world matrix.
     camera.updateMatrixWorld(true);
 
     let ping = this.renderTargets[this.sampleCount % 2]; // buffer to read from
     let pong = this.renderTargets[(this.sampleCount + 1) % 2]; // buffer to write to
 
+    this.uniforms.previous.value = ping.texture;
+    this.uniforms.sampleSeed.value = Math.floor(Math.random() * 0x100000000);
+    this.uniforms.sampleWeight.value = 1.0 / (this.sampleCount + 1);
+
+    this.uniforms.resolution.value = new Uint32Array([pong.width, pong.height]);
     this.uniforms.invResolution.value = new Vector2(
       1.0 / pong.width,
       1.0 / pong.height,
@@ -233,10 +236,9 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
 
     const projectionMatrix = camera.projectionMatrix;
     const viewMatrix = camera.matrixWorldInverse;
+    this.uniforms.invViewProjection.value = new Matrix4().multiplyMatrices(projectionMatrix, viewMatrix).invert();
 
     const normPhysicalSize = this.volume.normPhysicalSize;
-
-    this.uniforms.invViewProjection.value = new Matrix4().multiplyMatrices(projectionMatrix, viewMatrix).invert();
     this.uniforms.volumeMin.value = normPhysicalSize.clone().multiplyScalar(-0.5);
     this.uniforms.volumeMax.value = normPhysicalSize.clone().multiplyScalar(0.5);
     this.uniforms.volumeInvSize.value = new Vector3(
@@ -244,6 +246,7 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
       1.0 / normPhysicalSize.y,
       1.0 / normPhysicalSize.z,
     );
+    this.uniforms.volumeMajorant.value = this.volume.getChannel(0).rawMax;
 
     this.renderToBuffer.render(renderer, pong);
 
@@ -251,6 +254,9 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     // (since this.get3DObject returns the post process quad),
     // so we just need to set the relevant uniforms.
     this.postProcessUniforms.tHdr.value = pong.texture;
+
+    this.sampleCount += 1;
+    this.renderUpdateListener?.(this.sampleCount);
   }
 
   public get3dObject(): Mesh {
