@@ -49,14 +49,18 @@ interface HistogramDataRange {
   findFractionalBinOfValue(value: number): number;
 }
 
-export function histogramBinToLut(histogram: HistogramDataRange, binIndex: number): number {
+export function histogramValueToLut(histogram: HistogramDataRange, value: number): number {
   const min = histogram.getDataMin();
   const range = histogram.getDataMax() - min;
   if (!(range > 0)) {
     return 0;
   }
-  const lut = ((histogram.getValueFromBinIndex(binIndex) - min) / range) * LUT_MAX;
+  const lut = ((value - min) / range) * LUT_MAX;
   return Math.max(0, Math.min(LUT_MAX, lut));
+}
+
+export function histogramBinToLut(histogram: HistogramDataRange, binIndex: number): number {
+  return histogramValueToLut(histogram, histogram.getValueFromBinIndex(binIndex));
 }
 
 export function lutToHistogramValue(histogram: HistogramDataRange, lut: number): number {
