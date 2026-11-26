@@ -88,7 +88,7 @@ REPLACE = True  # overwrite OUTPUT_PATH if it already exists
 
 # --- Dataset dimensions -------------------------------------------------------
 CUBE_SIZE = 1024      # level-0 ZYX size (cubic)
-N_FRAMES = 15         # number of time frames
+N_FRAMES = 32         # number of time frames
 CHUNK_SIZE = 64       # OME-Zarr chunk size (64x64x64 cubes, 1 frame per chunk)
 DOWNSAMPLE_RATE = 2   # pyramid factor between levels (2 = half size per level)
 
@@ -100,11 +100,11 @@ DOWNSAMPLE_RATE = 2   # pyramid factor between levels (2 = half size per level)
 # The rope runs along Z across the full cube length; its (D x D)
 # cross-section is centered in the YX plane and spans
 # SCENE_OBJECT_SIZE * SCENE_FILL_RATIO (see rope_thread_layout).
-SCENE_OBJECT_SIZE = 512     # rope bounding-box size (YX cross-section)
+SCENE_OBJECT_SIZE = 960     # rope bounding-box size (YX cross-section)
 SCENE_FILL_RATIO = 0.9      # fraction of the bounding box the rope should
                             # span (the thread thickness is auto-scaled so
                             # the rope actually fills this much of the box)
-SCENE_NUM_THREADS = 100     # number of threads in the rope (more threads =>
+SCENE_NUM_THREADS = 64      # number of threads in the rope (more threads =>
                             # more rings => the rope can fill the box better)
 SCENE_THREAD_THICKNESS = 20 # base thread thickness (voxels); auto-scaled
                             # per frame to achieve SCENE_FILL_RATIO
@@ -122,7 +122,7 @@ SCENE_SEED = 42             # random seed (same seed on every frame => no
 # state => the animation loops seamlessly.
 # Keep the range narrow: with only a few dozen frames, a large twist
 # difference between consecutive frames makes the animation look jumpy.
-TWIST_MIN = 1.5   # loosest twist (minimum twist_rate)
+TWIST_MIN = 0.0   # loosest twist (minimum twist_rate)
 TWIST_MAX = 2.0   # tightest twist (maximum twist_rate)
 
 # --- Optional background noise (qim3d.generate.background) ----------------------
@@ -251,7 +251,7 @@ def make_frame(
     """Generate one (Z, Y, X) frame of the current scene: object centered
     in a full cube."""
     twist = twist_rate_for_frame(t, n_frames, TWIST_MIN, TWIST_MAX)
-    logging.info(f"Frame {t:2d}/{n_frames}: rope twist_rate = {twist:.3f}")
+    print(f"Frame {t:2d}/{n_frames}: rope twist_rate = {twist:.3f}")
 
     rope_vol = rope(
         shape=(cube_size, object_size, object_size),
@@ -332,13 +332,13 @@ def write_metadata(root: "zarr.core.Group", sizes: list[int]) -> None:
 
 def validate_dataset(path: str, n_levels: int) -> None:
     """Read the dataset back with qim3d and print a summary."""
-    logging.info("Validating the dataset with qim3d.io.import_ome_zarr ...")
+    print("Validating the dataset with qim3d.io.import_ome_zarr ...")
     for i in range(n_levels):
         arr = import_ome_zarr(path, scale=i, load=False)  # lazy: nothing loaded
-        logging.info(
+        print(
             f"  scale {i}: shape={arr.shape}, dtype={arr.dtype}, chunks={arr.chunks}"
         )
-    logging.info("Validation finished: dataset is readable by qim3d.")
+    print("Validation finished: dataset is readable by qim3d.")
 
 
 def main() -> None:
@@ -367,7 +367,7 @@ def main() -> None:
     sizes = pyramid_sizes(CUBE_SIZE, CHUNK_SIZE, DOWNSAMPLE_RATE)
     if sizes[-1] > CHUNK_SIZE:
         raise ValueError("Lowest level does not fit in a single chunk.")
-    logging.info(
+    print(
         f"Pyramid levels (Z): {sizes} -> {len(sizes)} levels, "
         f"{N_FRAMES} frames, chunk size {CHUNK_SIZE}."
     )
@@ -385,7 +385,7 @@ def main() -> None:
         SCENE_FILL_RATIO,
     )
     scale = thread_thickness / SCENE_THREAD_THICKNESS
-    logging.info(
+    print(
         f"Rope layout: {SCENE_NUM_THREADS} threads, thickness "
         f"{SCENE_THREAD_THICKNESS} -> {thread_thickness} (auto-scaled x{scale:.2f}) "
         f"-> rope spans ~{rope_diameter:.0f} px "
@@ -398,7 +398,7 @@ def main() -> None:
             f"bounding box; qim3d will silently drop the rest."
         )
     if rope_diameter / SCENE_OBJECT_SIZE < SCENE_FILL_RATIO - 0.01:
-        logging.info(
+        print(
             "Note: the requested fill ratio is limited by the thread count; "
             "increase SCENE_NUM_THREADS for a fuller rope."
         )
@@ -436,16 +436,16 @@ def main() -> None:
         for i, level in enumerate(pyramid):
             arrays[i][(t,)] = level
 
-        logging.info(
+        print(
             f"Frame {t:2d}/{N_FRAMES} done in {time.time() - t0:.1f}s "
             f"(scene + pyramid + {len(sizes)} level writes)"
         )
 
-    logging.info(f"All {N_FRAMES} frames written in {time.time() - t_start:.1f}s")
+    print(f"All {N_FRAMES} frames written in {time.time() - t_start:.1f}s")
 
     # ---- validation ---------------------------------------------------------------
     validate_dataset(OUTPUT_PATH, len(sizes))
-    logging.info(f"Done! OME-Zarr dataset available at: {OUTPUT_PATH}")
+    print(f"Done! OME-Zarr dataset available at: {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
