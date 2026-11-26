@@ -14,6 +14,7 @@ export const qimPathTraceUniforms = () => ({
   volumeMax: { type: "v3", value: new Vector3(0.5) },
   volumeInvSize: { type: "v3", value: new Vector3(1.0) },
   volumeMajorant: { type: "f", value: 1.0 },
+  volumeAlbedo: { type: "v3", value: new Vector3(1.0, 0.0, 1.0) },
 
   // camera
   resolution: { type: "uv2", value: new Uint32Array([1, 1]) },

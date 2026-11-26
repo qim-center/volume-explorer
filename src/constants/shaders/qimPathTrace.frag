@@ -13,14 +13,16 @@ uniform vec3 volumeMin;
 uniform vec3 volumeMax;
 uniform vec3 volumeInvSize;
 uniform float volumeMajorant;
+uniform vec3 volumeAlbedo;
 
 // camera
 uniform uvec2 resolution;
 uniform vec2 invResolution;
 uniform mat4 invViewProjection;
 
-const float tMin = 1e-3;
-const float tMax = 1e9;
+
+// Math helpers
+const float pi = 3.14159265359;
 
 float max3(vec3 v) {
   return max(v.x, max(v.y, v.z));
@@ -46,21 +48,40 @@ uint tea(uint v0, uint v1)
 
 // Generate random unsigned int in [0, 2^31-1)
 void mcg31(inout uint randState) {
-    const uint LCG_A = 1977654935u; // Multiplier from Hui-Ching Tang [EJOR 2007]
-    randState = (LCG_A * randState) & 0x7FFFFFFEu;
+  const uint LCG_A = 1977654935u; // Multiplier from Hui-Ching Tang [EJOR 2007]
+  randState = (LCG_A * randState) & 0x7FFFFFFEu;
 }
 
-// Generate random float in [0, 1)
+// Generate random float uniformly distributed in [0, 1)
+// pdf is implicitly 1
 float rnd(inout uint randState) {
-    mcg31(randState);
-    return float(randState) / float(0x80000000u);
+  mcg31(randState);
+  return float(randState) / float(0x80000000u);
 }
 
-/*
-  Get a ray that correspond to the given screen space (a.k.a pixel) coordinates.
-  Current implementation uses the inverse view projection matrix to ensure it works across different camera models.
-  This requires two 4x4 matvecs and two divisions, which could be optimized by assuming a perspective camera.
-*/
+// Generate random float exponentially distributed according to rate
+// pdf is implicitly rate * exp(-rate * x)
+float sampleExponential(float rate, inout uint randState) {
+    return -log(1.0 - rnd(randState)) / rate;
+}
+
+// Generate uniformly distributed vector in S^2
+// pdf is implicitly 1 / (4 * pi)
+vec3 sampleSphere(inout uint randState) {
+    float phi = 2.0 * pi * rnd(randState);
+    float cosTheta = 2.0 * rnd(randState) - 1.0;
+    float sinTheta = sqrt(max(1.0 - cosTheta * cosTheta, 0.0));
+
+    return vec3(
+        sinTheta * cos(phi),
+        sinTheta * sin(phi),
+        cosTheta
+    );
+}
+
+// Get a ray that correspond to the given screen space (a.k.a pixel) coordinates.
+// Current implementation uses the inverse view projection matrix to ensure it works across different camera models.
+// This requires two 4x4 matvecs- and two divisions, which could be optimized by assuming a perspective camera.
 void screenSpaceToWorldRay(vec2 screenSpacePosition, out vec3 rayOrigin, out vec3 rayDirection) {
   vec2 clipSpaceXY = 2.0 * (screenSpacePosition * invResolution) - 1.0;
 
@@ -73,7 +94,6 @@ void screenSpaceToWorldRay(vec2 screenSpacePosition, out vec3 rayOrigin, out vec
   rayOrigin = worldNear;
   rayDirection = normalize(worldFar - worldNear);
 }
-
 
 bool intersectAabb(vec3 rayOrigin, vec3 rayDirection, float tMin, float tMax, vec3 aabbMin, vec3 aabbMax, out float t) {
   vec3 rayInvDirection = 1.0 / rayDirection;
@@ -115,42 +135,149 @@ bool intersectAabb(vec3 rayOrigin, vec3 rayDirection, float tMin, float tMax, ve
   return false;
 }
 
+bool inAabb(vec3 position, vec3 aabbMin, vec3 aabbMax) {
+  return (aabbMin.x <= position.x && position.x <= aabbMax.x)
+    && (aabbMin.y <= position.y && position.y <= aabbMax.y)
+    && (aabbMin.z <= position.z && position.z <= aabbMax.z);
+}
+
 vec3 worldToVolume(vec3 worldPosition) {
   return (worldPosition - volumeMin) * volumeInvSize;
 } 
 
-vec3 estimateRadianceAndTransmittance(vec3 rayOrigin, vec3 rayDirection, out float transmittance, inout uint randState) {
-  vec3 radiance = vec3(0.0);
-  transmittance = 1.0;
+// Map an intensity to an extinction coefficient
+// TODO: define some parameterized function to control this
+float extinctionMap(float intensity) {
+  return intensity;
+}
 
-  float t;
-  bool hit = intersectAabb(rayOrigin, rayDirection, tMin, tMax, volumeMin, volumeMax, t);
+// Map an intensity to an albedo
+// TODO: implement color map
+vec3 albedoMap(float intensity) {
+  return volumeAlbedo;
+}
 
-  if (!hit) {
-    return radiance;
+// Samples a direction towards an emitter from position and also returns emitted radiance from that emitter in the opposite direction
+vec3 sampleEmitterDirection(vec3 position, out float pdf, out vec3 radiance, inout uint randState)  {
+  radiance = vec3(12.0);
+  pdf = 1.0;
+
+  return normalize(vec3(1.0, 1.0, 1.0));
+}
+
+
+// Compute an estimate of the transmittance from rayOrigin all the way out of the volume.
+// Current implementation uses delta tracking, although ratio tracking may be better for some volumes.
+float estimateTransmittance(vec3 rayOrigin, vec3 rayDirection, uint randState) {
+  for(uint i = 0u; i < 128u; i++) {
+    float t = sampleExponential(volumeMajorant, randState);
+    rayOrigin += t * rayDirection;
+
+    if (!inAabb(rayOrigin, volumeMin, volumeMax)) {
+      return 1.0;
+    }
+
+    float intensity = texture(volume, worldToVolume(rayOrigin)).r;
+      float extinction = extinctionMap(intensity);
+
+    if (rnd(randState) < extinction / volumeMajorant) {
+      return 0.0;
+    }
   }
+}
 
+// Samples wi from a distribution approximating Li(position, wi) and also returns the value of Li(position, wi)
+vec3 sampleDirectIncidentRadiance(vec3 position, out float pdf, out vec3 radiance, inout uint randState) {
+  vec3 direction = sampleEmitterDirection(position, pdf, radiance, randState);
+
+  float transmittance = estimateTransmittance(position, direction, randState);
+
+  radiance *= transmittance;
+
+  return direction;
+}
+
+// Evaluates the phase function of the medium, i.e. p(wi, wo)
+float evaluatePhaseFunction(vec3 wi, vec3 wo) {
+  return 1.0 / (4.0 * pi);
+}
+
+// Samples wo from the phase function p(wi, wo)
+// Also computes the value of the phase function
+vec3 samplePhaseFunction(vec3 wo, out float pdf, out float phase, inout uint randState) {
+  pdf = 1.0 / (4.0 * pi);
+  return sampleSphere(randState);
+}
+
+// Computes an estimate of incident radiance Li(rayOrigin, rayDirection) and
+// simultaneously estimates the transmittance from rayOrigin all the way out of the medium in rayDirection 
+vec3 estimateRadianceAndTransmittance(vec3 rayOrigin, vec3 rayDirection, out float transmittance, inout uint randState) {
+  float t;
+  bool hit = intersectAabb(rayOrigin, rayDirection, 0.0, 1e9, volumeMin, volumeMax, t);
+  if (!hit) {
+    // The ray fully misses the medium
+    transmittance = 1.0;
+    return vec3(0.0);
+  }
   rayOrigin += t * rayDirection;
 
-  for(uint i = 0u; i < 256u; i++) {
-    t = -log(rnd(randState)) / volumeMajorant;
-    float s;
-    hit = intersectAabb(rayOrigin, rayDirection, tMin, t, volumeMin, volumeMax, s);
+  vec3 radiance = vec3(0.0);
+  vec3 throughput = vec3(1.0);
+  bool interacted = false; // whether the primary ray interacted with the medium or not
 
-    if (hit) {
-      return radiance;
+  // trace path
+  for(uint i = 0u; i < 128u; i++) {
+    t = sampleExponential(volumeMajorant, randState);
+    rayOrigin += t * rayDirection;
+
+    if (!inAabb(rayOrigin, volumeMin, volumeMax)) {
+      break;
     }
 
-    vec3 position = rayOrigin + t * rayDirection;
-    float intensity = texture(volume, worldToVolume(position)).r;
-    
-    if (rnd(randState) < intensity / volumeMajorant) {
-      transmittance = 0.0;
-      return radiance;
+    float intensity = texture(volume, worldToVolume(rayOrigin)).r;
+
+    float extinction = extinctionMap(intensity);
+
+    // Skip if null interaction
+    if (rnd(randState) < 1.0 - extinction / volumeMajorant) continue;
+
+    interacted = true;
+
+    vec3 albedo = albedoMap(intensity);
+    float maxAlbedo = max3(volumeAlbedo);
+
+    if (rnd(randState) < maxAlbedo) {
+
+      throughput *= albedo * (1.0 / maxAlbedo);
+
+      // Scattering interaction
+      vec3 wo = -rayDirection;
+      {
+        // Next event estimation
+        float pdf;
+        vec3 incidentRadiance;
+
+        vec3 wi = sampleDirectIncidentRadiance(rayOrigin, pdf, incidentRadiance, randState);
+        float phase = evaluatePhaseFunction(wi, wo);
+
+        radiance += throughput * phase * incidentRadiance * (1.0 / pdf);
+      }
+
+      // Scatter
+      float pdf;
+      float phase;
+      rayDirection = samplePhaseFunction(-rayDirection, pdf, phase, randState);
+      throughput *= phase / pdf;
+
+    } else {
+      // Absorption interaction simply ends the path
+      break;
     }
 
-    rayOrigin = position;
   }
+
+  transmittance = interacted ? 0.0 : 1.0;
+  return radiance;
 }
 
 void main()
