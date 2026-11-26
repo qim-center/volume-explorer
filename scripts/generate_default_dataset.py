@@ -23,18 +23,19 @@ Current scene: twisted rope
     therefore auto-scales the thread thickness (``rope_thread_layout``)
     so the rope spans ``SCENE_OBJECT_SIZE * SCENE_FILL_RATIO``.
 
-Resulting layout (multi-resolution pyramid, 64^3 chunks everywhere):
+Resulting layout (multi-resolution pyramid):
 
     default_omezarr.zarr
-    ├── 0   15 x 1024 x 1024 x 1024   level 0 (full resolution)
-    ├── 1   15 x  512 x  512 x  512   level 1 (2x downsampled)
-    ├── 2   15 x  256 x  256 x  256   level 2
-    ├── 3   15 x  128 x  128 x  128   level 3
-    └── 4   15 x   64 x  64 x  64   level 4 (fits in a single chunk)
+    ├── 0   N_FRAMES x CUBE_SIZE^3            level 0 (full resolution)
+    ├── 1   N_FRAMES x (CUBE_SIZE/2)^3        level 1
+    └── ...   ... down to the level that fits in a single chunk
 
-Every level uses (1, 64, 64, 64) chunks: 64^3 spatial cubes, one time
-frame per chunk. Axis order is "tzyx" (time first, spatial "zyx" last),
-as recommended by the OME-Zarr 0.5 specification
+Each level is a 4D array of shape (N_FRAMES x S x S x S), with the
+spatial size S reduced by DOWNSAMPLE_RATE at every level until the
+level fits in a single chunk. Every level uses
+(1, CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE) chunks: one spatial cube of
+CHUNK_SIZE^3 per time frame. Axis order is "tzyx" (time first, spatial
+"zyx" last), as recommended by the OME-Zarr 0.5 specification
 (https://ngff.openmicroscopy.org/0.5/).
 
 qim3d usage
@@ -59,10 +60,10 @@ Run:
 
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import zarr
@@ -87,10 +88,18 @@ OUTPUT_PATH = os.path.join(
 REPLACE = True  # overwrite OUTPUT_PATH if it already exists
 
 # --- Dataset dimensions -------------------------------------------------------
-CUBE_SIZE = 1024      # level-0 ZYX size (cubic)
+CUBE_SIZE = 512      # level-0 ZYX size (cubic)
 N_FRAMES = 32         # number of time frames
 CHUNK_SIZE = 64       # OME-Zarr chunk size (64x64x64 cubes, 1 frame per chunk)
 DOWNSAMPLE_RATE = 2   # pyramid factor between levels (2 = half size per level)
+
+# --- Parallelism ---------------------------------------------------------------
+# Number of frames generated at the same time. Each frame is independent, so
+# frames run concurrently and are written to the pyramid as they finish. 1
+# restores sequential generation. Higher values speed up generation but
+# increase peak memory: every in-flight frame holds its full pyramid (~1 GB at
+# the current CUBE_SIZE).
+N_PARALLEL_FRAMES = 32
 
 # --- Current scene: twisted rope ---------------------------------------------
 # The scene below is what the default dataset currently shows. It is
@@ -100,11 +109,11 @@ DOWNSAMPLE_RATE = 2   # pyramid factor between levels (2 = half size per level)
 # The rope runs along Z across the full cube length; its (D x D)
 # cross-section is centered in the YX plane and spans
 # SCENE_OBJECT_SIZE * SCENE_FILL_RATIO (see rope_thread_layout).
-SCENE_OBJECT_SIZE = 960     # rope bounding-box size (YX cross-section)
+SCENE_OBJECT_SIZE = 480     # rope bounding-box size (YX cross-section)
 SCENE_FILL_RATIO = 0.9      # fraction of the bounding box the rope should
                             # span (the thread thickness is auto-scaled so
                             # the rope actually fills this much of the box)
-SCENE_NUM_THREADS = 64      # number of threads in the rope (more threads =>
+SCENE_NUM_THREADS = 32      # number of threads in the rope (more threads =>
                             # more rings => the rope can fill the box better)
 SCENE_THREAD_THICKNESS = 20 # base thread thickness (voxels); auto-scaled
                             # per frame to achieve SCENE_FILL_RATIO
@@ -122,8 +131,8 @@ SCENE_SEED = 42             # random seed (same seed on every frame => no
 # state => the animation loops seamlessly.
 # Keep the range narrow: with only a few dozen frames, a large twist
 # difference between consecutive frames makes the animation look jumpy.
-TWIST_MIN = 0.0   # loosest twist (minimum twist_rate)
-TWIST_MAX = 2.0   # tightest twist (maximum twist_rate)
+TWIST_MIN = 0.5   # loosest twist (minimum twist_rate)
+TWIST_MAX = 1.0   # tightest twist (maximum twist_rate)
 
 # --- Optional background noise (qim3d.generate.background) ----------------------
 # Maximum noise amplitude (0-255); 0 disables the background noise entirely.
@@ -285,6 +294,35 @@ def make_frame(
     return frame
 
 
+def generate_frame(
+    t: int,
+    n_frames: int,
+    thread_thickness: int,
+    sizes: list[int],
+    arrays: list,
+) -> float:
+    """Generate one frame at every pyramid level and write it to ``arrays``.
+
+    Builds the multi-resolution pyramid for a single frame (level 0 = full
+    resolution), then writes that frame's time slice to each level. Returns
+    the wall-clock generation time in seconds.
+    """
+    t0 = time.time()
+
+    frame = make_frame(t, n_frames, CUBE_SIZE, SCENE_OBJECT_SIZE, thread_thickness)
+
+    # Multi-resolution pyramid for this frame (level 0 = full resolution)
+    pyramid = [frame]
+    for _ in range(len(sizes) - 1):
+        pyramid.append(coarsen_cube(pyramid[-1], DOWNSAMPLE_RATE))
+
+    # Write the frame at all levels (one time slice per level)
+    for i, level in enumerate(pyramid):
+        arrays[i][(t,)] = level
+
+    return time.time() - t0
+
+
 def create_arrays(root: "zarr.core.Group", sizes: list[int]) -> list:
     """Create one Zarr array per pyramid level (shape T x Z x Y x X)."""
     arrays = []
@@ -342,11 +380,6 @@ def validate_dataset(path: str, n_levels: int) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s](message)s",
-    )
-
     # ---- sanity checks -------------------------------------------------------
     if TWIST_MIN < 0 or TWIST_MAX < TWIST_MIN:
         raise ValueError(
@@ -363,6 +396,8 @@ def main() -> None:
         raise ValueError("SCENE_OBJECT_SIZE must be smaller than CUBE_SIZE.")
     if CUBE_SIZE % CHUNK_SIZE != 0:
         raise ValueError("CUBE_SIZE should be a multiple of CHUNK_SIZE.")
+    if N_PARALLEL_FRAMES < 1:
+        raise ValueError("N_PARALLEL_FRAMES must be a positive integer.")
 
     sizes = pyramid_sizes(CUBE_SIZE, CHUNK_SIZE, DOWNSAMPLE_RATE)
     if sizes[-1] > CHUNK_SIZE:
@@ -393,9 +428,9 @@ def main() -> None:
         f"{SCENE_OBJECT_SIZE} px bounding box)"
     )
     if threads_placed < SCENE_NUM_THREADS:
-        logging.warning(
-            f"Only {threads_placed}/{SCENE_NUM_THREADS} threads fit in the "
-            f"bounding box; qim3d will silently drop the rest."
+        print(
+            f"Warning: only {threads_placed}/{SCENE_NUM_THREADS} threads fit in "
+            f"the bounding box; qim3d will silently drop the rest."
         )
     if rope_diameter / SCENE_OBJECT_SIZE < SCENE_FILL_RATIO - 0.01:
         print(
@@ -420,28 +455,32 @@ def main() -> None:
     arrays = create_arrays(root, sizes)
     write_metadata(root, sizes)
 
-    # ---- generate the time series, level by level -----------------------------
+    # ---- generate the time series, in parallel over frames --------------------
     t_start = time.time()
-    for t in range(N_FRAMES):
-        t0 = time.time()
+    if N_PARALLEL_FRAMES > 1:
+        with ThreadPoolExecutor(max_workers=N_PARALLEL_FRAMES) as pool:
+            futures = {
+                pool.submit(generate_frame, t, N_FRAMES, thread_thickness,
+                            sizes, arrays): t
+                for t in range(N_FRAMES)
+            }
+            for future in as_completed(futures):
+                t = futures[future]
+                print(
+                    f"Frame {t:2d}/{N_FRAMES} done in {future.result():.1f}s "
+                    f"(scene + pyramid + {len(sizes)} level writes)"
+                )
+    else:
+        for t in range(N_FRAMES):
+            dt = generate_frame(t, N_FRAMES, thread_thickness, sizes, arrays)
+            print(
+                f"Frame {t:2d}/{N_FRAMES} done in {dt:.1f}s "
+                f"(scene + pyramid + {len(sizes)} level writes)"
+            )
 
-        frame = make_frame(t, N_FRAMES, CUBE_SIZE, SCENE_OBJECT_SIZE, thread_thickness)
-
-        # Multi-resolution pyramid for this frame (level 0 = full resolution)
-        pyramid = [frame]
-        for _ in range(len(sizes) - 1):
-            pyramid.append(coarsen_cube(pyramid[-1], DOWNSAMPLE_RATE))
-
-        # Write the frame at all levels (one time slice per level)
-        for i, level in enumerate(pyramid):
-            arrays[i][(t,)] = level
-
-        print(
-            f"Frame {t:2d}/{N_FRAMES} done in {time.time() - t0:.1f}s "
-            f"(scene + pyramid + {len(sizes)} level writes)"
-        )
-
-    print(f"All {N_FRAMES} frames written in {time.time() - t_start:.1f}s")
+    parallel = min(N_PARALLEL_FRAMES, N_FRAMES)
+    mode = f"{parallel} frames in parallel" if parallel > 1 else "sequentially"
+    print(f"All {N_FRAMES} frames written in {time.time() - t_start:.1f}s ({mode})")
 
     # ---- validation ---------------------------------------------------------------
     validate_dataset(OUTPUT_PATH, len(sizes))

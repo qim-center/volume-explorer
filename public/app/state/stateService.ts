@@ -28,8 +28,8 @@ export const cropAxisStateKeys: Record<CropAxis, { min: CropStateKey; max: CropS
 };
 
 export const DEFAULT_TEST_DATA: Record<string, TestDataSpec> = {
-  zarrQimEscargot: {
-    url: "https://public.qim.dk/escargot/escargot.zarr/",
+  defaultOmeZarr: {
+    url: "https://public.qim.dk/volume_explorer/default_omezarr.zarr/",
     type: VolumeFileFormat.ZARR,
   },
   omeTiff: {

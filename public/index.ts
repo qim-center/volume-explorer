@@ -966,7 +966,7 @@ function main() {
   const sourceUrlInput = ui.sourceUrlInput;
   const sourceForm = ui.sourceForm;
   const loadSourceBtn = ui.sourceLoadButton;
-  const defaultSource = TEST_DATA.zarrQimEscargot.url as string;
+  const defaultSource = TEST_DATA.defaultOmeZarr.url as string;
 
   const setSourceError = (warning?: string) => setUiNote(warning);
 
