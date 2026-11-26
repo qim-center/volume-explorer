@@ -4,12 +4,8 @@ import {
   FloatType,
   Matrix4,
   Mesh,
-  NormalBlending,
   PerspectiveCamera,
-  PlaneGeometry,
-  Quaternion,
   RGBAFormat,
-  ShaderMaterial,
   UnsignedByteType,
   Vector3,
   WebGLRenderTarget,
@@ -44,19 +40,22 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
   private volume: Volume;
 
   private volumeTexture: Data3DTexture;
+  private lutTexture: DataTexture;
 
   // Resources related to sampling
   private uniforms = qimPathTraceUniforms();
   private renderToBuffer: RenderToBuffer;
-  // two render targets to do ping-pong with
+  // Two render targets to do ping-pong with
   private renderTargets: WebGLRenderTarget[] = [];
 
   // Resources related to post processing
   private postProcessUniforms = qimPostProcessUniforms();
   private postProcessRenderToBuffer: RenderToBuffer;
 
+  // Internal state needed by shaders
   private isCameraMoving: boolean = false;
   private sampleCount: number = 0;
+  private alphaToExtinctionFactor = 100.0;
 
   private renderUpdateListener?: (iteration: number) => void;
 
@@ -69,22 +68,33 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
   constructor(volume: Volume, settings: VolumeRenderSettings = new VolumeRenderSettings(volume)) {
     this.volume = volume;
 
-    // create volume texture
+    // setup uniforms that won't change per frame
+    
     const { x: sx, y: sy, z: sz } = volume.imageInfo.subregionSize;
     const data = new Float32Array(sx * sy * sz).fill(0.0);
     
-    // defaults to rgba and unsignedbytetype so dont need to supply format this time.
     this.volumeTexture = new Data3DTexture(data, sx, sy, sz);
     this.volumeTexture.format = RedFormat;
-    this.volumeTexture.type = FloatType;
+    this.volumeTexture.type = FloatType; // TODO: possibly reduce precision to save bandwidth?
     this.volumeTexture.minFilter = NearestFilter;
     this.volumeTexture.magFilter = NearestFilter;
     this.volumeTexture.generateMipmaps = false;
-
-
     this.volumeTexture.needsUpdate = true;
 
     this.uniforms.volume.value = this.volumeTexture;
+
+    // create lut texture
+    const lutData = new Uint8Array(LUT_ARRAY_LENGTH).fill(1);
+    
+    this.lutTexture = new DataTexture(lutData, LUT_ENTRIES, 1)
+    this.lutTexture.format = RGBAFormat;
+    this.lutTexture.type = UnsignedByteType;
+    this.lutTexture.minFilter = LinearFilter;
+    this.lutTexture.magFilter = LinearFilter;
+    this.lutTexture.generateMipmaps = false;
+    this.lutTexture.needsUpdate = true;
+
+    this.uniforms.lut.value = this.lutTexture;
 
     // Initialize ping pong render targets
     for (let i = 0; i < 2; i++) {
@@ -238,16 +248,6 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     const viewMatrix = camera.matrixWorldInverse;
     this.uniforms.invViewProjection.value = new Matrix4().multiplyMatrices(projectionMatrix, viewMatrix).invert();
 
-    const normPhysicalSize = this.volume.normPhysicalSize;
-    this.uniforms.volumeMin.value = normPhysicalSize.clone().multiplyScalar(-0.5);
-    this.uniforms.volumeMax.value = normPhysicalSize.clone().multiplyScalar(0.5);
-    this.uniforms.volumeInvSize.value = new Vector3(
-      1.0 / normPhysicalSize.x,
-      1.0 / normPhysicalSize.y,
-      1.0 / normPhysicalSize.z,
-    );
-    this.uniforms.volumeMajorant.value = this.volume.getChannel(0).rawMax;
-
     this.renderToBuffer.render(renderer, pong);
 
     // post processing will be done by ThreeJsPanel 
@@ -282,38 +282,44 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
   }
 
   updateActiveChannels(channelColors: FuseChannel[], channelData: Channel[]): void {
-    // const ch = [-1, -1, -1, -1];
-    // let activeChannel = 0;
-    // const NC = this.volume.imageInfo.numChannels;
-    // const maxch = 4;
-    // for (let i = 0; i < NC && activeChannel < maxch; ++i) {
-    //   // check that channel is not disabled and is loaded
-    //   if (channelColors[i].rgbColor !== FUSE_DISABLED_RGB_COLOR && channelData[i].loaded) {
-    //     ch[activeChannel] = i;
-    //     activeChannel++;
-    //   }
-    // }
+    this.updateVolumeData(channelColors[0].chIndex);
+    
+    let majorant = 0;    
+    for (let i = 0; i < LUT_ENTRIES; i++) {
+      const alpha = channelColors[0].lut[4 * i + 3] / 255;
+      const extinction = this.alphaToExtinctionFactor * alpha;
+      if (extinction > majorant) {
+        majorant = extinction;
+      }
+    }
+    this.uniforms.alphaToExtinctionFactor.value = this.alphaToExtinctionFactor;
+    this.uniforms.majorant.value = majorant;
 
-    // const unchanged = ch.every((elem, index) => elem === this.viewChannels[index], this);
-    // if (unchanged) {
-    //   return;
-    // }
+    this.lutTexture.image.data = channelColors[0].lut;
+    this.lutTexture.needsUpdate = true;
+    
+    const normPhysicalSize = this.volume.normPhysicalSize;
+    this.uniforms.volumeMin.value = normPhysicalSize.clone().multiplyScalar(-0.5);
+    this.uniforms.volumeMax.value = normPhysicalSize.clone().multiplyScalar(0.5);
+    this.uniforms.volumeInvSize.value = new Vector3(
+      1.0 / normPhysicalSize.x,
+      1.0 / normPhysicalSize.y,
+      1.0 / normPhysicalSize.z,
+    );
+    
+    const channel = this.volume.getChannel(channelColors[0].chIndex);
+    this.uniforms.intensityMin.value = channel.rawMin;
+    this.uniforms.intensityInvRange.value = 1.0 / (channel.rawMax - channel.rawMin);
 
-    // this.pathTracingUniforms.gNChannels.value = activeChannel;
-
-    // this.viewChannels = ch;
-    // update volume data according to channels selected.
-    this.updateVolumeData();
-    this.updateMaterial();
     this.resetProgress();
   }
 
-  updateVolumeData(): void {
+  updateVolumeData(channelIndex: number): void {
     const { x: sx, y: sy, z: sz } = this.volume.imageInfo.subregionSize;
 
     const data = new Float32Array(sx * sy * sz);
 
-    const channel = this.volume.getChannel(0);
+    const channel = this.volume.getChannel(channelIndex);
     for (let iz = 0; iz < sz; ++iz) {
       for (let iy = 0; iy < sy; ++iy) {
         for (let ix = 0; ix < sx; ++ix) {

@@ -2,20 +2,25 @@ precision highp float;
 precision highp int;
 precision highp sampler3D;
 
-// sampling
+// Sampling
 uniform sampler2D previous;
 uniform uint sampleSeed;
 uniform float sampleWeight;
 
-// volume
+// Volume
 uniform sampler3D volume;
 uniform vec3 volumeMin;
 uniform vec3 volumeMax;
 uniform vec3 volumeInvSize;
-uniform float volumeMajorant;
-uniform vec3 volumeAlbedo;
+uniform float majorant;
 
-// camera
+// Lut
+uniform float intensityMin;
+uniform float intensityInvRange;
+uniform sampler2D lut;
+uniform float alphaToExtinctionFactor;
+
+// Camera
 uniform uvec2 resolution;
 uniform vec2 invResolution;
 uniform mat4 invViewProjection;
@@ -145,24 +150,21 @@ vec3 worldToVolume(vec3 worldPosition) {
   return (worldPosition - volumeMin) * volumeInvSize;
 } 
 
-// Map an intensity to an extinction coefficient
-// TODO: define some parameterized function to control this
-float extinctionMap(float intensity) {
-  return intensity;
+// Map an intensity to an albedo and an extinction coefficient
+void albedoExtinction(float intensity, out vec3 albedo, out float extinction) {
+  float u = (intensity - intensityMin) * intensityInvRange;
+  vec4 lutValue = texture(lut, vec2(u, 0.5));
+
+  albedo = lutValue.rgb;
+  extinction = alphaToExtinctionFactor * lutValue.a;
 }
 
-// Map an intensity to an albedo
-// TODO: implement color map
-vec3 albedoMap(float intensity) {
-  return volumeAlbedo;
-}
-
-// Samples a direction towards an emitter from position and also returns emitted radiance from that emitter in the opposite direction
+// Samples a direction towards an emitter from position and also returns emitted radiance from that emitter towards position
 vec3 sampleEmitterDirection(vec3 position, out float pdf, out vec3 radiance, inout uint randState)  {
   radiance = vec3(12.0);
   pdf = 1.0;
 
-  return normalize(vec3(1.0, 1.0, 1.0));
+  return normalize(vec3(1.0, -1.0, 1.0));
 }
 
 
@@ -170,7 +172,7 @@ vec3 sampleEmitterDirection(vec3 position, out float pdf, out vec3 radiance, ino
 // Current implementation uses delta tracking, although ratio tracking may be better for some volumes.
 float estimateTransmittance(vec3 rayOrigin, vec3 rayDirection, uint randState) {
   for(uint i = 0u; i < 128u; i++) {
-    float t = sampleExponential(volumeMajorant, randState);
+    float t = sampleExponential(majorant, randState);
     rayOrigin += t * rayDirection;
 
     if (!inAabb(rayOrigin, volumeMin, volumeMax)) {
@@ -178,9 +180,11 @@ float estimateTransmittance(vec3 rayOrigin, vec3 rayDirection, uint randState) {
     }
 
     float intensity = texture(volume, worldToVolume(rayOrigin)).r;
-      float extinction = extinctionMap(intensity);
+    vec3 _albedo;
+    float extinction;
+    albedoExtinction(intensity, _albedo, extinction);
 
-    if (rnd(randState) < extinction / volumeMajorant) {
+    if (rnd(randState) < extinction / majorant) {
       return 0.0;
     }
   }
@@ -227,7 +231,7 @@ vec3 estimateRadianceAndTransmittance(vec3 rayOrigin, vec3 rayDirection, out flo
 
   // trace path
   for(uint i = 0u; i < 128u; i++) {
-    t = sampleExponential(volumeMajorant, randState);
+    t = sampleExponential(majorant, randState);
     rayOrigin += t * rayDirection;
 
     if (!inAabb(rayOrigin, volumeMin, volumeMax)) {
@@ -235,16 +239,16 @@ vec3 estimateRadianceAndTransmittance(vec3 rayOrigin, vec3 rayDirection, out flo
     }
 
     float intensity = texture(volume, worldToVolume(rayOrigin)).r;
-
-    float extinction = extinctionMap(intensity);
+    vec3 albedo;
+    float extinction;
+    albedoExtinction(intensity, albedo, extinction);
 
     // Skip if null interaction
-    if (rnd(randState) < 1.0 - extinction / volumeMajorant) continue;
+    if (rnd(randState) < 1.0 - extinction / majorant) continue;
 
     interacted = true;
 
-    vec3 albedo = albedoMap(intensity);
-    float maxAlbedo = max3(volumeAlbedo);
+    float maxAlbedo = max3(albedo);
 
     if (rnd(randState) < maxAlbedo) {
 
