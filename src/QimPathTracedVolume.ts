@@ -33,29 +33,30 @@ import Channel from "./Channel.js";
 import RenderToBuffer from "./RenderToBuffer.js";
 import { qimPathTraceUniforms, qimPathTraceFragmentShaderSrc } from "./constants/qimPathTraceShader.js";
 import { qimPostProcessFragmentShaderSrc, qimPostProcessUniforms } from "./constants/qimPostProcessShader.js";
+import FusedChannelData from "./FusedChannelData.js";
 
 export default class QimPathTracedVolume implements VolumeRenderImpl {
   private settings: VolumeRenderSettings;
 
+  // Volume and channel to being rendered
   private volume: Volume;
+  private channelIndex: number = 0;
 
+  // Resources needed for rendering
   private volumeTexture: Data3DTexture;
   private lutTexture: DataTexture;
-
-  // Resources related to sampling
   private uniforms = qimPathTraceUniforms();
   private renderToBuffer: RenderToBuffer;
-  // Two render targets to do ping-pong with
-  private renderTargets: WebGLRenderTarget[] = [];
+  private renderTargets: WebGLRenderTarget[] = []; // Two render targets to do ping-pong with
 
-  // Resources related to post processing
+  // Resources related for post processing
   private postProcessUniforms = qimPostProcessUniforms();
   private postProcessRenderToBuffer: RenderToBuffer;
 
   // Internal state needed by shaders
   private isCameraMoving: boolean = false;
   private sampleCount: number = 0;
-  private alphaToExtinctionFactor = 200.0;
+  private lutMaxAlpha: number = 0.0;
 
   private renderUpdateListener?: (iteration: number) => void;
 
@@ -68,11 +69,9 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
   constructor(volume: Volume, settings: VolumeRenderSettings = new VolumeRenderSettings(volume)) {
     this.volume = volume;
 
-    // setup uniforms that won't change per frame
-    
+    // Create volume texture
     const { x: sx, y: sy, z: sz } = volume.imageInfo.subregionSize;
     const data = new Float32Array(sx * sy * sz).fill(0.0);
-    
     this.volumeTexture = new Data3DTexture(data, sx, sy, sz);
     this.volumeTexture.format = RedFormat;
     this.volumeTexture.type = FloatType; // TODO: possibly reduce precision to save bandwidth?
@@ -80,12 +79,10 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     this.volumeTexture.magFilter = NearestFilter;
     this.volumeTexture.generateMipmaps = false;
     this.volumeTexture.needsUpdate = true;
-
     this.uniforms.volume.value = this.volumeTexture;
-
-    // create lut texture
-    const lutData = new Uint8Array(LUT_ARRAY_LENGTH).fill(1);
     
+    // Create lut texture
+    const lutData = new Uint8Array(LUT_ARRAY_LENGTH).fill(1);
     this.lutTexture = new DataTexture(lutData, LUT_ENTRIES, 1)
     this.lutTexture.format = RGBAFormat;
     this.lutTexture.type = UnsignedByteType;
@@ -93,9 +90,8 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     this.lutTexture.magFilter = LinearFilter;
     this.lutTexture.generateMipmaps = false;
     this.lutTexture.needsUpdate = true;
-
     this.uniforms.lut.value = this.lutTexture;
-
+    
     // Initialize ping pong render targets
     for (let i = 0; i < 2; i++) {
       this.renderTargets.push(new WebGLRenderTarget(2, 2, {
@@ -117,9 +113,6 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     // Update settings
     this.updateSettings(settings);
     this.settings = settings; // turns off ts initialization warning
-
-    // bounds will go from 0 to physicalSize
-    const physicalSize = this.getNormVolumeSize();
   }
 
   public cleanup(): void {
@@ -163,16 +156,13 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     }
 
     if (dirtyFlags & SettingsFlags.MATERIAL) {
-      this.updateMaterial();
+      this.updateMajorant();
     }
 
-    // update bounds
     if (dirtyFlags & SettingsFlags.ROI) {
       const { bmin, bmax } = this.settings.bounds;
 
       // [bmin, bmax] is from [-0.5, 0.5] and is relative to this.volume.normPhysicalSize
-      
-
       this.uniforms.clippedAabbMin.value = bmin.clone().multiply(this.volume.normPhysicalSize);
       this.uniforms.clippedAabbMax.value = bmax.clone().multiply(this.volume.normPhysicalSize);
       this.resetProgress();
@@ -183,15 +173,14 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     }
 
     if (dirtyFlags & SettingsFlags.MASK_ALPHA) {
-      // Update channel and alpha mask if they have changed
-      // this.updateVolumeData4();
-    }
-    if (dirtyFlags & SettingsFlags.VIEW) {
 
+    }
+
+    if (dirtyFlags & SettingsFlags.VIEW) {
+      
     }
 
     if (dirtyFlags & SettingsFlags.SAMPLING) {
-
       const resolution = this.settings.resolution.clone();
       for (let i = 0; i < this.renderTargets.length; i++) {
         this.renderTargets[i].setSize(resolution.x, resolution.y);
@@ -201,9 +190,12 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
         ? LinearFilter
         : NearestFilter;
 
-      this.volumeTexture.minFilter = filter;
-      this.volumeTexture.magFilter = filter;
-      this.volumeTexture.needsUpdate = true;
+      if (this.volumeTexture.minFilter != filter || this.volumeTexture.magFilter != filter) {
+        this.volumeTexture.minFilter = filter;
+        this.volumeTexture.magFilter = filter;
+
+        this.volumeTexture.needsUpdate = true;
+      }
     }
 
     this.resetProgress();
@@ -276,22 +268,11 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
   }
 
   updateActiveChannels(channelColors: FuseChannel[], channelData: Channel[]): void {
-    this.updateVolumeData(channelColors[0].chIndex);
+    this.channelIndex = channelColors[0].chIndex;
     
-    let majorant = 0;    
-    for (let i = 0; i < LUT_ENTRIES; i++) {
-      const alpha = channelColors[0].lut[4 * i + 3] / 255;
-      const extinction = this.alphaToExtinctionFactor * alpha;
-      if (extinction > majorant) {
-        majorant = extinction;
-      }
-    }
-    this.uniforms.alphaToExtinctionFactor.value = this.alphaToExtinctionFactor;
-    this.uniforms.majorant.value = majorant;
+    this.updateVolumeData();
+    this.updateLutData();
 
-    this.lutTexture.image.data = channelColors[0].lut;
-    this.lutTexture.needsUpdate = true;
-    
     const normPhysicalSize = this.volume.normPhysicalSize;
     this.uniforms.volumeMin.value = normPhysicalSize.clone().multiplyScalar(-0.5);
     this.uniforms.volumeInvSize.value = new Vector3(
@@ -307,12 +288,12 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     this.resetProgress();
   }
 
-  updateVolumeData(channelIndex: number): void {
+  updateVolumeData(): void {
     const { x: sx, y: sy, z: sz } = this.volume.imageInfo.subregionSize;
 
     const data = new Float32Array(sx * sy * sz);
 
-    const channel = this.volume.getChannel(channelIndex);
+    const channel = this.volume.getChannel(this.channelIndex);
     for (let iz = 0; iz < sz; ++iz) {
       for (let iy = 0; iy < sy; ++iy) {
         for (let ix = 0; ix < sx; ++ix) {
@@ -320,13 +301,56 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
         }
       }
     }
-    this.volumeTexture.image.data.set(data);
-    this.volumeTexture.needsUpdate = true;
-  }
+    
+    const needsResize = this.volumeTexture.image.width != sx
+      || this.volumeTexture.image.height != sy
+      || this.volumeTexture.image.depth != sz;
 
-  updateMaterial(): void {
+    if (needsResize) {
+      const volumeTexture = new Data3DTexture(data, sx, sy, sz);
+      volumeTexture.format = this.volumeTexture.format;
+      volumeTexture.type = this.volumeTexture.type;
+      volumeTexture.minFilter = this.volumeTexture.minFilter;
+      volumeTexture.magFilter = this.volumeTexture.magFilter;
+      volumeTexture.generateMipmaps = this.volumeTexture.generateMipmaps;
+      volumeTexture.needsUpdate = true;
+      
+      this.volumeTexture = volumeTexture;
+      this.uniforms.volume.value = volumeTexture;
+    } else  {
+      this.volumeTexture.image.data.set(data);
+      this.volumeTexture.needsUpdate = true;
+    }
+    
     this.resetProgress();
   }
+
+  updateLutData(): void {
+    const lut = this.volume.getChannel(this.channelIndex).colorPalette;
+    
+    let maxAlpha = 0;    
+    for (let i = 0; i < LUT_ENTRIES; i++) {
+      const alpha = lut[4 * i + 3] / 255;
+      if (alpha > maxAlpha) {
+        maxAlpha = alpha;
+      }
+    }
+    this.lutMaxAlpha = maxAlpha;
+
+    this.lutTexture.image.data = lut;
+    this.lutTexture.needsUpdate = true;
+
+    this.updateMajorant();
+    this.resetProgress();
+  } 
+
+  updateMajorant(): void {
+    this.uniforms.alphaToExtinctionFactor.value = this.settings.density * 200.0;
+    this.uniforms.majorant.value = this.lutMaxAlpha * this.settings.density * 200.0;
+
+    this.resetProgress();
+  }
+  
 
   updateExposure(e: number): void {
 
