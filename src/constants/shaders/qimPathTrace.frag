@@ -10,9 +10,12 @@ uniform float sampleWeight;
 // Volume
 uniform sampler3D volume;
 uniform vec3 volumeMin;
-uniform vec3 volumeMax;
 uniform vec3 volumeInvSize;
 uniform float majorant;
+
+// Roi
+uniform vec3 clippedAabbMin;
+uniform vec3 clippedAabbMax;
 
 // Lut
 uniform float intensityMin;
@@ -175,7 +178,7 @@ float estimateTransmittance(vec3 rayOrigin, vec3 rayDirection, uint randState) {
     float t = sampleExponential(majorant, randState);
     rayOrigin += t * rayDirection;
 
-    if (!inAabb(rayOrigin, volumeMin, volumeMax)) {
+    if (!inAabb(rayOrigin, clippedAabbMin, clippedAabbMax)) {
       return 1.0;
     }
 
@@ -217,7 +220,7 @@ vec3 samplePhaseFunction(vec3 wo, out float pdf, out float phase, inout uint ran
 // simultaneously estimates the transmittance from rayOrigin all the way out of the medium in rayDirection 
 vec3 estimateRadianceAndTransmittance(vec3 rayOrigin, vec3 rayDirection, out float transmittance, inout uint randState) {
   float t;
-  bool hit = intersectAabb(rayOrigin, rayDirection, 0.0, 1e9, volumeMin, volumeMax, t);
+  bool hit = intersectAabb(rayOrigin, rayDirection, 0.0, 1e9, clippedAabbMin, clippedAabbMax, t);
   if (!hit) {
     // The ray fully misses the medium
     transmittance = 1.0;
@@ -234,7 +237,7 @@ vec3 estimateRadianceAndTransmittance(vec3 rayOrigin, vec3 rayDirection, out flo
     t = sampleExponential(majorant, randState);
     rayOrigin += t * rayDirection;
 
-    if (!inAabb(rayOrigin, volumeMin, volumeMax)) {
+    if (!inAabb(rayOrigin, clippedAabbMin, clippedAabbMax)) {
       break;
     }
 

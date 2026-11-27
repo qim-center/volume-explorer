@@ -11,10 +11,13 @@ export const qimPathTraceUniforms = () => ({
   // Volume
   volume: { type: "t", value: null as any },
   volumeMin: { type: "v3", value: new Vector3(-0.5) },
-  volumeMax: { type: "v3", value: new Vector3(0.5) },
   volumeInvSize: { type: "v3", value: new Vector3(1.0) },
   majorant: { type: "f", value: 1.0 },
   
+  // Roi
+  clippedAabbMin: { type: "v3", value: new Vector3(-0.5) },
+  clippedAabbMax: { type: "v3", value: new Vector3(0.5) },
+
   // Lut
   intensityMin: { type: "f", value: 0.0 },
   intensityInvRange: { type: "f", value: 1.0 },

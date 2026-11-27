@@ -55,7 +55,7 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
   // Internal state needed by shaders
   private isCameraMoving: boolean = false;
   private sampleCount: number = 0;
-  private alphaToExtinctionFactor = 100.0;
+  private alphaToExtinctionFactor = 200.0;
 
   private renderUpdateListener?: (iteration: number) => void;
 
@@ -168,20 +168,14 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
 
     // update bounds
     if (dirtyFlags & SettingsFlags.ROI) {
-      const { normRegionSize, normRegionOffset } = this.volume;
       const { bmin, bmax } = this.settings.bounds;
-      const scaledSize = this.getNormVolumeSize();
 
-      const sizeMin = normRegionOffset.clone().subScalar(0.5).multiply(scaledSize);
-      const sizeMax = normRegionOffset.clone().add(normRegionSize).subScalar(0.5).multiply(scaledSize);
+      // [bmin, bmax] is from [-0.5, 0.5] and is relative to this.volume.normPhysicalSize
+      
 
-      const clipMin = bmin.clone().multiply(scaledSize);
-      // this.pathTracingUniforms.gClippedAaBbMin.value = clipMin.clamp(sizeMin, sizeMax);
-
-      const clipMax = bmax.clone().multiply(scaledSize);
-      // this.pathTracingUniforms.gClippedAaBbMax.value = clipMax.clamp(sizeMin, sizeMax);
-
-      // this.pathTracingUniforms.gVolCenter.value = this.volume.getContentCenter().multiply(this.settings.scale);
+      this.uniforms.clippedAabbMin.value = bmin.clone().multiply(this.volume.normPhysicalSize);
+      this.uniforms.clippedAabbMax.value = bmax.clone().multiply(this.volume.normPhysicalSize);
+      this.resetProgress();
     }
 
     if (dirtyFlags & SettingsFlags.CAMERA) {
@@ -300,7 +294,6 @@ export default class QimPathTracedVolume implements VolumeRenderImpl {
     
     const normPhysicalSize = this.volume.normPhysicalSize;
     this.uniforms.volumeMin.value = normPhysicalSize.clone().multiplyScalar(-0.5);
-    this.uniforms.volumeMax.value = normPhysicalSize.clone().multiplyScalar(0.5);
     this.uniforms.volumeInvSize.value = new Vector3(
       1.0 / normPhysicalSize.x,
       1.0 / normPhysicalSize.y,
